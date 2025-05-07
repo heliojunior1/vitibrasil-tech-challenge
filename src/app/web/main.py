@@ -4,5 +4,5 @@ from src.app.web.routes_auth import router as auth_router
 
 app = FastAPI(title="Vitivinicultura API")
 
-app.include_router(main_router)
-app.include_router(auth_router)
+app.include_router(main_router, prefix="/api")
+app.include_router(auth_router, prefix="/auth")
