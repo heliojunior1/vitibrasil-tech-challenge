@@ -18,8 +18,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = authenticate_user(db, form_data.username, form_data.password)
+def login(user: LoginRequest, db: Session = Depends(get_db)):
+    user = authenticate_user(db, payload.username, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     token = create_access_token({"sub": user.username})

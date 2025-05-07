@@ -1,9 +1,14 @@
-from sqlalchemy import Column, Integer, String
-from src.app.config.database import Base
+from pydantic import BaseModel
+from typing import Optional
 
-class Viticultura(Base):
-    __tablename__ = "viticultura"
+class ViticulturaDTO(BaseModel):
+    ano: int
+    estado: str
+    municipio: str
+    categoria: str
+    produto: str
+    quantidade: float
+    unidade: str
 
-    id = Column(Integer, primary_key=True, index=True)
-    tipo = Column(String)
-    valor = Column(String)
+    class Config:
+        orm_mode = True

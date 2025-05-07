@@ -4,7 +4,7 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-class UserLogin(BaseModel):
+class LoginRequest(BaseModel):
     username: str
     password: str
 

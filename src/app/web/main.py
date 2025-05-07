@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 from src.app.web.routes import router as main_router
 from src.app.web.routes_auth import router as auth_router
+from src.app.config.database import Base, engine
+from src.app.models.user import User
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Vitivinicultura API")
 
