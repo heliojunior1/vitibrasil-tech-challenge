@@ -4,48 +4,55 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-import pandas as pd
+import re
 
 def get_data_from_embrapa():
     options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.get("http://vitibrasil.cnpuv.embrapa.br/index.php?opcao=opt_02")  # Produção
+    driver.get("http://vitibrasil.cnpuv.embrapa.br/index.php?opcao=opt_02")
 
-    aba = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.LINK_TEXT, "Produção"))
-    )
-    aba.click()
+    try:
+        # Pegar o ano da seção do título
+        titulo = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "text_center"))
+        ).text
+        ano = int(re.search(r"\[(\d{4})\]", titulo).group(1))
 
-    tabela = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.TAG_NAME, "table"))
-    )
+        # Pegar a tabela com os dados
+        tabela = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "tb_dados"))
+        )
 
-    linhas = tabela.find_elements(By.TAG_NAME, "tr")
-    dados = []
-    for linha in linhas:
-        colunas = linha.find_elements(By.TAG_NAME, "td")
-        dados.append([coluna.text for coluna in colunas])
+        linhas = tabela.find_elements(By.TAG_NAME, "tr")
+        dados = []
 
-    driver.quit()
+        for linha in linhas:
+            colunas = linha.find_elements(By.TAG_NAME, "td")
+            if len(colunas) == 2:
+                descricao = colunas[0].text.strip()
+                valor_texto = colunas[1].text.strip().replace(".", "").replace(",", ".")
+                try:
+                    quantidade = float(valor_texto) if valor_texto != "-" else 0.0
+                except ValueError:
+                    quantidade = 0.0
 
-    if not dados or len(dados) < 2:
+                dados.append({
+                    "ano": ano,
+                    "estado": "RS",
+                    "municipio": "RS",
+                    "categoria": "produção",
+                    "produto": descricao,
+                    "quantidade": quantidade,
+                    "unidade": "litros"
+                })
+
+        driver.quit()
+        return dados
+
+    except Exception as e:
+        driver.quit()
+        print("Erro ao raspar dados:", e)
         return []
-
-    df = pd.DataFrame(dados[1:], columns=dados[0])
-
-    # Converta para o formato esperado pela entidade Viticultura
-    resultados = []
-    for _, row in df.iterrows():
-        resultados.append({
-            "ano": int(row.get("Ano", 0)),
-            "uf": row.get("Estado", "RS"),
-            "categoria": "produção",
-            "descricao": row.get("Produto", "Desconhecido"),
-            "quantidade": float(row.get("Quantidade", 0).replace(".", "").replace(",", ".")),
-            "unidade": row.get("Unidade", "litros")
-        })
-
-    return resultados
