@@ -1,5 +1,7 @@
+from src.app.scraper.viticulture_scraper import get_data_from_embrapa
+from src.app.config.database import SessionLocal
 from sqlalchemy.orm import Session
-from app.domain.models import Viticultura
+
 
 def get_all(session: Session):
     return session.query(Viticultura).all()

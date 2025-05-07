@@ -1,10 +1,15 @@
-fastapi
-uvicorn[standard]
+fastapi==0.115.6
+urllib3==2.3.0
+uvicorn==0.34.0
 sqlalchemy
-pydantic
+pydantic-settings
 python-dotenv
-selenium
+selenium==4.27.1
 requests
+urllib3==2.3.0
+uvicorn==0.34.0
+websocket-client==1.8.0
+wsproto==1.2.0
 
 # Para testes
 pytest

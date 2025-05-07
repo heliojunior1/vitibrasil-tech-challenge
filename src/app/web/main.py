@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.web.routes import router
+from src.app.web.routes import router
 
 app = FastAPI(title="Vitivinicultura API")
 

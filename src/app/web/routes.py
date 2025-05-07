@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.service.viticulture_service import obter_dados
+from src.app.service.viticulture_service import obter_dados
 
 router = APIRouter()
 

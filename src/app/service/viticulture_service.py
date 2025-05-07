@@ -1,6 +1,6 @@
-from app.scraper.scraper import get_data_from_embrapa
-from app.repository.viticulture_repo import get_all, save
-from app.config.database import SessionLocal
+from src.app.scraper.viticulture_scraper import get_data_from_embrapa
+from src.app.repository.viticulture_repo import get_all, save
+from src.app.config.database import SessionLocal
 
 def obter_dados():
     session = SessionLocal()
