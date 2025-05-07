@@ -15,3 +15,8 @@ wsproto==1.2.0
 pytest
 pytest-asyncio
 httpx
+
+python-jose
+passlib[bcrypt]
+python-jose
+python-multipart
