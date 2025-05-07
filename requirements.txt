@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+python-dotenv
+selenium
+requests
+
+# Para testes
+pytest
+pytest-asyncio
+httpx

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: vitibrasil-tech-challenge
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn api_modelo:app
+    envVars:
+      - key: JWT_SECRET
+        value: MEUSEGREDOAQUI
