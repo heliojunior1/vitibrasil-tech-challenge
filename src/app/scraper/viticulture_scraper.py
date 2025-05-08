@@ -1,58 +1,68 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-import re
+import requests
+import pandas as pd
+import io
+from bs4 import BeautifulSoup
+from datetime import datetime
+from sqlalchemy.orm import Session
+from urllib.parse import urlencode
 
-def get_data_from_embrapa():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
+from src.app.domain.viticulture import ViticulturaDTO, ViticultureCategory
+from src.app.repository.viticulture_repo import RepositorioViticulture
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.get("http://vitibrasil.cnpuv.embrapa.br/index.php?opcao=opt_02")
+BASE_URL = "http://vitibrasil.cnpuv.embrapa.br/index.php"
 
+def gerar_url(opcao: str, subopcao: str, ano: int) -> str:
+    params = {"opcao": opcao, "subopcao": subopcao, "ano": ano}
+    return f"{BASE_URL}?{urlencode(params)}"
+
+def baixar_csv_por_link(csv_url: str) -> pd.DataFrame:
+    response = requests.get(csv_url)
+    response.raise_for_status()
+    return pd.read_csv(io.StringIO(response.text), sep='\t', engine='python')
+
+def salvar_ou_retornar_do_banco(df: pd.DataFrame, categoria: ViticultureCategory, tipo: str, ano: int, url: str, db: Session):
+    repo = RepositorioViticulture(db)
+    registros_salvos = []
+
+    for _, row in df.iterrows():
+        try:
+            dto = ViticulturaDTO(
+                category=categoria,
+                subcategory=tipo,
+                item=row.get('Produto') or row.get('Cultivar') or row.get('Países') or "Desconhecido",
+                year=ano,
+                value=float(str(row.get('Quantidade') or row.get('Quantidade (Kg)') or row.get('Quantidade (L.)')).replace('.', '').replace(',', '.')),
+                unit=row.get('Unidade') or 'kg',
+                currency=row.get('Valor (US$)', None),
+                source_url=url,
+                scraped_at=datetime.utcnow()
+            )
+            repo.adicionar(dto)
+            registros_salvos.append(dto)
+        except Exception as e:
+            print(f"Erro ao processar linha: {e}")
+
+    return registros_salvos
+
+def buscar_csv_por_categoria(categoria: ViticultureCategory, opcao: str, subopcao: str, ano: int, db: Session):
+    url = gerar_url(opcao, subopcao, ano)
+    print(f"Buscando dados de: {url}")
     try:
-        # Pegar o ano da seção do título
-        titulo = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "text_center"))
-        ).text
-        ano = int(re.search(r"\[(\d{4})\]", titulo).group(1))
+        page = requests.get(url)
+        page.raise_for_status()
+        soup = BeautifulSoup(page.text, "html.parser")
+        links = soup.find_all("a", href=True)
+        csv_links = [link['href'] for link in links if link['href'].endswith('.csv') or link['href'].endswith('.txt')]
 
-        # Pegar a tabela com os dados
-        tabela = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "tb_dados"))
-        )
+        resultados = []
+        for link in csv_links:
+            full_url = link if link.startswith("http") else f"http://vitibrasil.cnpuv.embrapa.br/{link.lstrip('./')}"
+            df = baixar_csv_por_link(full_url)
+            dados = salvar_ou_retornar_do_banco(df, categoria, subopcao, ano, full_url, db)
+            resultados.extend(dados)
 
-        linhas = tabela.find_elements(By.TAG_NAME, "tr")
-        dados = []
-
-        for linha in linhas:
-            colunas = linha.find_elements(By.TAG_NAME, "td")
-            if len(colunas) == 2:
-                descricao = colunas[0].text.strip()
-                valor_texto = colunas[1].text.strip().replace(".", "").replace(",", ".")
-                try:
-                    quantidade = float(valor_texto) if valor_texto != "-" else 0.0
-                except ValueError:
-                    quantidade = 0.0
-
-                dados.append({
-                    "ano": ano,
-                    "estado": "RS",
-                    "municipio": "RS",
-                    "categoria": "produção",
-                    "produto": descricao,
-                    "quantidade": quantidade,
-                    "unidade": "litros"
-                })
-
-        driver.quit()
-        return dados
-
+        return resultados
     except Exception as e:
-        driver.quit()
-        print("Erro ao raspar dados:", e)
-        return []
+        print(f"Falha ao buscar CSV. Buscando no banco... Erro: {e}")
+        repo = RepositorioViticulture(db)
+        return repo.buscar_por_categoria_tipo_ano(categoria, subopcao, ano)

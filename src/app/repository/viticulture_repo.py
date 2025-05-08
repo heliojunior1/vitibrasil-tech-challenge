@@ -1,18 +1,18 @@
-from src.app.scraper.viticulture_scraper import get_data_from_embrapa
-from src.app.config.database import SessionLocal
 from sqlalchemy.orm import Session
-from src.app.models.viticulture import Viticultura
+from src.app.models.viticulture import Viticulture
+from src.app.domain.viticulture import ViticulturaDTO
 
+class RepositorioViticulture:
 
+    def __init__(self, db: Session):
+        self.db = db
 
-def get_all(session: Session):
-    return session.query(Viticultura).all()
+    def adicionar(self, data: ViticulturaDTO):
+        novo_registro = Viticulture(**data.dict())
+        self.db.add(novo_registro)
+        self.db.commit()
+        self.db.refresh(novo_registro)
+        return novo_registro
 
-def save(session: Session, dados: list[dict]):
-    for item in dados:
-        try:
-            session.add(Viticultura(**item))
-        except Exception as e:
-            print("Erro ao salvar item:", item)
-            print("Motivo:", e)
-    session.commit()
+    def listar_todos(self):
+        return self.db.query(Viticulture).all()

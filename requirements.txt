@@ -4,9 +4,7 @@ uvicorn==0.34.0
 sqlalchemy
 pydantic-settings
 python-dotenv
-selenium==4.27.1
 pandas 
-webdriver-manager
 requests
 urllib3==2.3.0
 uvicorn==0.34.0

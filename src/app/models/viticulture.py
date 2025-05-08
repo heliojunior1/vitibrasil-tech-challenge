@@ -1,14 +1,27 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Enum, DateTime, UniqueConstraint
 from src.app.config.database import Base
+import enum
 
-class Viticultura(Base):
-    __tablename__ = "viticultura"
+class ViticultureCategory(enum.Enum):
+    producao = "producao"
+    comercializacao = "comercializacao"
+    exportacao = "exportacao"
+    importacao = "importacao"
+
+class Viticulture(Base):
+    __tablename__ = "viticulture"
 
     id = Column(Integer, primary_key=True, index=True)
-    ano = Column(Integer, nullable=False)
-    estado = Column(String, nullable=False)
-    municipio = Column(String, nullable=False)
-    categoria = Column(String, nullable=False)  # ex: produção, exportação etc.
-    produto = Column(String, nullable=False)
-    quantidade = Column(Float, nullable=False)
-    unidade = Column(String, nullable=False) 
+    category = Column(Enum(ViticultureCategory), nullable=False)
+    subcategory = Column(String, nullable=True)
+    item = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    value = Column(Float, nullable=False)
+    unit = Column(String, nullable=False)
+    currency = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    scraped_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("category", "subcategory", "item", "year", name="uq_viticulture_entry"),
+    )
