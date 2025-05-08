@@ -13,9 +13,9 @@ from src.app.scraper.viticulture_scraper import (
 logging.basicConfig(level=logging.INFO)
 
 
-def consultar_dados_com_parametros(categoria, tipo, ano, opcao, subopcao, db: Session):
+def consultar_dados_com_parametros(categoria, tipo, ano, opcao, subopcao, db):
     try:
-        dados = buscar_csv_por_categoria(categoria, opcao, subopcao, ano, db=None)
+        dados = buscar_csv_por_categoria(categoria, opcao, subopcao, ano, db)
         if not dados:
             raise Exception("Nenhum dado retornado do site.")
 
@@ -33,14 +33,14 @@ def consultar_dados_com_parametros(categoria, tipo, ano, opcao, subopcao, db: Se
             raise HTTPException(status_code=500, detail="Falha ao consultar e nenhum dado no banco.")
         return fallback
 
-def consultar_tudo(db: Session):
+def consultar_tudo(db):
     logging.info("Iniciando consulta completa...")
 
     total_importados = 0
     registros_fallback = 0
 
     for cat_str, opcao in CATEGORIAS.items():
-        categoria = ViticultureCategory(cat_str)
+        categoria = ViticultureCategory(opcao)
         subopcoes = obter_subopcoes(opcao)
 
         if not subopcoes:  # Caso como produção que não tem subopções
@@ -50,7 +50,7 @@ def consultar_tudo(db: Session):
             anos = obter_intervalo_anos(opcao, subopcao)
             for ano in anos:
                 try:
-                    dados = buscar_csv_por_categoria(categoria, opcao, subopcao, ano, db=None)
+                    dados = buscar_csv_por_categoria(categoria, opcao, subopcao, ano, db)
                     if not dados:
                         raise Exception("Nenhum dado do site")
 

@@ -4,11 +4,11 @@ from datetime import datetime
 from enum import Enum
 
 class ViticultureCategory(str, Enum):
-    producao = "producao"
-    processamento = "processamento"
-    comercializacao = "comercializacao"
-    exportacao = "exportacao"
-    importacao = "importacao"
+    producao = "opt_02"
+    processamento = "opt_03"
+    comercializacao = "opt_04"
+    exportacao = "opt_05"
+    importacao = "opt_06"
 
 class ViticulturaDTO(BaseModel):
     category: ViticultureCategory

@@ -21,7 +21,7 @@ def baixar_csv_por_link(csv_url: str) -> pd.DataFrame:
     response.raise_for_status()
     return pd.read_csv(io.StringIO(response.text), sep='\t', engine='python')
 
-def salvar_ou_retornar_do_banco(df: pd.DataFrame, categoria: ViticultureCategory, tipo: str, ano: int, url: str, db: Session):
+def salvar_ou_retornar_do_banco(df: pd.DataFrame, categoria: ViticultureCategory, tipo: str, ano: int, url: str, db):
     repo = RepositorioViticulture(db)
     registros_salvos = []
 
@@ -45,8 +45,9 @@ def salvar_ou_retornar_do_banco(df: pd.DataFrame, categoria: ViticultureCategory
 
     return registros_salvos
 
-def buscar_csv_por_categoria(categoria: ViticultureCategory, opcao: str, subopcao: str, ano: int, db: Session):
+def buscar_csv_por_categoria(categoria: ViticultureCategory, opcao: str, subopcao: str, ano: int, db):
     url = gerar_url(opcao, subopcao, ano)
+    print(f"URL gerada: {url}")  # Adicione este print
     print(f"Buscando dados de: {url}")
     try:
         page = requests.get(url)
@@ -63,12 +64,17 @@ def buscar_csv_por_categoria(categoria: ViticultureCategory, opcao: str, subopca
             resultados.extend(dados)
 
         return resultados
+    except requests.exceptions.RequestException as e:
+        print(f"Falha de rede ao buscar CSV: {url}. Erro: {e}")
+    except pd.errors.ParserError as e:
+        print(f"Falha ao parsear CSV de: {url}. Erro: {e}")
     except Exception as e:
-        print(f"Falha ao buscar CSV. Buscando no banco... Erro: {e}")
+        print(f"Erro inesperado ao buscar CSV de {url}. Erro: {e}")
         repo = RepositorioViticulture(db)
         return repo.buscar_por_categoria_tipo_ano(categoria, subopcao, ano)
 def obter_subopcoes(opcao: str) -> list[str]:
     url = f"{BASE_URL}?opcao={opcao}&ano=2023"
+    print(f"URL gerada: {url}")
     response = requests.get(url)
     if response.status_code != 200:
         return []

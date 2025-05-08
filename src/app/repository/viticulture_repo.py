@@ -12,7 +12,6 @@ class RepositorioViticulture:
     def adicionar(self, data: ViticulturaDTO):
         novo_registro = Viticulture(**data.dict())
         self.db.add(novo_registro)
-        self.db.commit()
         self.db.refresh(novo_registro)
         return novo_registro
 
