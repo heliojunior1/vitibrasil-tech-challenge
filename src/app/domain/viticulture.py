@@ -5,7 +5,7 @@ from enum import Enum
 
 class ViticultureCategory(str, Enum):
     producao = "producao"
-    Processamento = "processamento"
+    processamento = "processamento"
     comercializacao = "comercializacao"
     exportacao = "exportacao"
     importacao = "importacao"
@@ -22,4 +22,4 @@ class ViticulturaDTO(BaseModel):
     scraped_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Enum, DateTime, UniqueConstraint
 from src.app.config.database import Base
+from datetime import datetime
 import enum
 
 class ViticultureCategory(enum.Enum):

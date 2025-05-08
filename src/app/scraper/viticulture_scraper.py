@@ -5,11 +5,12 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from sqlalchemy.orm import Session
 from urllib.parse import urlencode
-
+from src.app.domain.viticulture import ViticultureCategory
 from src.app.domain.viticulture import ViticulturaDTO, ViticultureCategory
 from src.app.repository.viticulture_repo import RepositorioViticulture
 
 BASE_URL = "http://vitibrasil.cnpuv.embrapa.br/index.php"
+CATEGORIAS = {cat.name: cat.value for cat in ViticultureCategory}
 
 def gerar_url(opcao: str, subopcao: str, ano: int) -> str:
     params = {"opcao": opcao, "subopcao": subopcao, "ano": ano}
@@ -66,3 +67,32 @@ def buscar_csv_por_categoria(categoria: ViticultureCategory, opcao: str, subopca
         print(f"Falha ao buscar CSV. Buscando no banco... Erro: {e}")
         repo = RepositorioViticulture(db)
         return repo.buscar_por_categoria_tipo_ano(categoria, subopcao, ano)
+def obter_subopcoes(opcao: str) -> list[str]:
+    url = f"{BASE_URL}?opcao={opcao}&ano=2023"
+    response = requests.get(url)
+    if response.status_code != 200:
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    botoes = soup.select("button.btn_sopt[name='subopcao']")
+    return [botao["value"] for botao in botoes if "value" in botao.attrs]
+
+def obter_intervalo_anos(opcao: str, subopcao: str = None) -> list[int]:
+    url = f"{BASE_URL}?opcao={opcao}"
+    if subopcao:
+        url += f"&subopcao={subopcao}"
+    url += "&ano=2023"
+
+    response = requests.get(url)
+    if response.status_code != 200:
+        return list(range(2018, 2025))
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    input_ano = soup.select_one("input[name='ano'][type='number']")
+
+    try:
+        ano_min = int(input_ano.get("min", "2018"))
+        ano_max = int(input_ano.get("max", "2024"))
+        return list(range(ano_min, ano_max + 1))
+    except Exception:
+        return list(range(2018, 2025))
