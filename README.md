@@ -1,5 +1,5 @@
 # vitibrasil-tech-challenge
-Projeto da API para coleta e consulta de dados da Embrapa usando FastAPI + Selenium para a especialização de  Machine Learning Engineering
+Projeto da API para coleta e consulta de dados da Embrapa usando FastAPI + requests para a especialização de  Machine Learning Engineering
 
 # comandos para serem executados
 python -m venv venv 

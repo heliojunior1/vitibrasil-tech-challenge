@@ -1,12 +1,10 @@
 fastapi==0.115.6
 urllib3==2.3.0
-uvicorn==0.34.0
 sqlalchemy
 pydantic-settings
 python-dotenv
 pandas 
 requests
-urllib3==2.3.0
 uvicorn==0.34.0
 websocket-client==1.8.0
 wsproto==1.2.0
@@ -18,7 +16,6 @@ httpx
 
 python-jose
 passlib[bcrypt]
-python-jose
 python-multipart
 bcrypt==4.0.1
 beautifulsoup4  

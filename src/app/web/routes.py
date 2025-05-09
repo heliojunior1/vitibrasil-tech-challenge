@@ -28,7 +28,7 @@ router = APIRouter(
                 "Se ambos falharem, retorna um erro."
             )
            )
-async def get_viticulture_data_and_save(db: Session = Depends(get_db_session)):
+async def get_viticulture_data_and_save(db: Session = Depends(get_db)):
     """
     Endpoint para obter e opcionalmente atualizar dados de viticultura.
     - Tenta uma raspagem de dados em tempo real do site da Embrapa.
