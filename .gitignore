@@ -172,8 +172,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-producao.html
-.gitignore
-html_comercializacao.html
-.gitignore
-.gitignore
+
