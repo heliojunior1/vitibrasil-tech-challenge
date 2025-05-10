@@ -5,9 +5,13 @@ import time
 import json
 import unicodedata
 import re
+import os
+import logging
+logger = logging.getLogger(__name__) 
+
+CACHED_DATA_FILENAME = "vitibrasil_data_cache.json"
 
 def normalize_text(text):
-    """Normalizes text by removing accents, converting to lowercase, and replacing spaces/hyphens with underscores."""
     if not text:
         return None
     text = str(text)
@@ -28,7 +32,7 @@ def get_page_soup(url, description="page"):
             resp.raise_for_status()
             return BeautifulSoup(resp.content, 'lxml')
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching {description} at {url}: {e}")
+            logger.error(f"Error fetching {description} at {url}: {e}")
             if attempt == max_retries:
                 return None
             time.sleep(2 * attempt)
@@ -45,32 +49,26 @@ def get_page_metadata(option_code, reference_year=2023):
     soup = get_page_soup(base_url + urlencode(meta_url_params), description=f"metadata for {option_code}")
 
     if not soup:
-        print(f"Could not fetch metadata page for {option_code} at year {reference_year}")
+        logger.info(f"Could not fetch metadata page for {option_code} at year {reference_year}")
         return None, None, [], normalize_text(option_code) # Fallback display name
 
     min_year, max_year = None, None
     main_option_display_name = normalize_text(option_code) # Fallback
 
-    # Try to get main option display name from its button
-    # This requires a page where main option buttons are visible, typically the initial page for the option.
     main_opt_button = soup.find('button', {'name': 'opcao', 'value': option_code})
     if main_opt_button and main_opt_button.get_text(strip=True):
         main_option_display_name = normalize_text(main_opt_button.get_text(strip=True))
     else:
-        # Fallback: Try to get from page title <p class="text_center">
         page_title_tag = soup.find('p', class_='text_center')
         if page_title_tag:
             title_text = page_title_tag.get_text(strip=True)
-            # If title is like "Main Category - SubCategory [Year]" or "Main Category [Year]"
-            # Extract the "Main Category" part.
-            if " - " in title_text: # "Processamento - Viniferas [2023]"
+            if " - " in title_text: 
                 general_part = title_text.split(" - ")[0]
                 main_option_display_name = normalize_text(general_part.strip())
-            else: # "Comercializacao [2023]"
+            else: 
                 match_title = re.match(r"^(.*?)(?:\[\d{4}\])?$", title_text)
                 if match_title and match_title.group(1).strip():
                     main_option_display_name = normalize_text(match_title.group(1).strip())
-
 
     year_label = soup.find('label', class_='lbl_pesq')
     if year_label and year_label.string:
@@ -80,22 +78,17 @@ def get_page_metadata(option_code, reference_year=2023):
             max_year = int(match_year_range.group(2))
 
     sub_options_details = []
-    # Suboption buttons can be <button> or <input type="submit">
     suboption_elements = soup.find_all(['button', 'input'], attrs={'name': 'subopcao'})
 
     for btn in suboption_elements:
         if btn.name == 'input' and btn.get('type') != 'submit':
-            continue # Skip if it's an input but not a submit button for suboption
+            continue
 
         sub_code = btn.get('value')
-        sub_name_text = btn.get_text(strip=True) if btn.name == 'button' else btn.get('value') # Input submit often has text in value
+        sub_name_text = btn.get_text(strip=True) if btn.name == 'button' else btn.get('value')
         
-        # For input type="submit", the text might be in its 'id' or a label associated with it.
-        # A common pattern is that the button text itself is descriptive.
         if btn.name == 'input' and btn.get('type') == 'submit':
-            # The value attribute of input type=submit is often the displayed text
              sub_name_text = btn.get('value')
-
 
         if sub_code and sub_name_text:
             sub_options_details.append({'code': sub_code, 'name': normalize_text(sub_name_text)})
@@ -124,7 +117,6 @@ def get_page_metadata(option_code, reference_year=2023):
 
 
 def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = None,
-                          # These are the descriptive names to be used in the JSON output
                           json_aba_name: str = None,
                           json_subopcao_name: str = None):
     base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php?"
@@ -133,7 +125,6 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         params['subopcao'] = suboption_code
     
     url = base_url + urlencode(params)
-    # Use option_code and suboption_code for logging the fetch attempt
     page_description = f"data for {option_code}"
     if suboption_code:
         page_description += f"/{suboption_code}"
@@ -141,12 +132,11 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
 
     soup = get_page_soup(url, description=page_description)
 
-    # Determine final names for JSON output
     final_aba_name = json_aba_name if json_aba_name else normalize_text(option_code)
-    final_subopcao_name = json_subopcao_name # This will be the descriptive normalized name or None
+    final_subopcao_name = json_subopcao_name
 
     if not soup:
-        print(f"Falha ao carregar dados de {url}")
+        logger.info(f"Falha ao carregar dados de {url}")
         return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
 
     tabela_bs = soup.select_one("table.tb_dados")
@@ -154,7 +144,7 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         tabela_bs = soup.find(lambda tag: tag.name == "table" and "tb_dados" in (tag.get('class') or []))
     
     if not tabela_bs:
-        print(f"Tabela de dados não encontrada em {url}")
+        logger.info(f"Tabela de dados não encontrada em {url}")
         return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
 
     header_cells_elements = []
@@ -168,9 +158,9 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         if not all_table_rows_for_header:
             return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
         
-        for r_idx, r in enumerate(all_table_rows_for_header):
-            potential_headers = r.find_all(['th', 'td'])
-            if any(ph.name == 'th' for ph in potential_headers) or r.find('strong'):
+        for r_idx, r_loop in enumerate(all_table_rows_for_header):
+            potential_headers = r_loop.find_all(['th', 'td'])
+            if any(ph.name == 'th' for ph in potential_headers) or r_loop.find('strong'):
                 header_cells_elements = potential_headers
                 start_index_for_rows = r_idx + 1
                 break
@@ -182,7 +172,7 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
     header_keys = [hk for hk in header_keys if hk]
 
     if not header_keys:
-        print(f"Alerta: Não foi possível extrair nomes de cabeçalho da tabela em {url}")
+        logger.info(f"Alerta: Não foi possível extrair nomes de cabeçalho da tabela em {url}")
         first_data_row_cols = 0
         body_for_col_count = tabela_bs.find('tbody')
         rows_for_col_count = body_for_col_count.find_all('tr') if body_for_col_count else tabela_bs.find_all('tr')[start_index_for_rows:]
@@ -194,7 +184,7 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
             header_keys = [f"coluna_{i+1}" for i in range(first_data_row_cols)]
         else: 
             header_keys = ["coluna_1", "coluna_2"] 
-        print(f"Usando cabeçalhos genéricos: {header_keys}")
+        logger.info(f"Usando cabeçalhos genéricos: {header_keys}")
 
     dados_coletados = []
     categoria_contextual = None 
@@ -226,26 +216,21 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         if first_cell_text_lower.startswith("total") or first_cell_text_lower.startswith("subtotal"):
             continue
         
-        # Ensure we have enough columns for the detected headers, or at least 2 for basic data.
-        # This helps avoid errors if a row is malformed or not a data row.
         if len(cols) < len(header_keys) and len(cols) < 2:
             continue
 
-
         for i, cell_element in enumerate(cols):
-            if i < len(header_keys): # Process only as many cells as we have header keys
-                original_key = header_keys[i] # Use original_key for decisions
+            if i < len(header_keys): 
+                original_key = header_keys[i] 
                 value_str = cell_element.get_text(strip=True)
                 
                 cleaned_value = None
                 if value_str == '-' or value_str == '':
                     cleaned_value = None 
                 else:
-                    # Determine if the value should be numeric based on the original_key
                     is_numeric_candidate = any(k_word in original_key for k_word in ['quantidade', 'valor', 'kg', 'us', 'l', '_ano', 'coluna_2']) or \
-                                           (len(header_keys) > 1 and i == len(header_keys) -1) # last column often numeric
+                                           (len(header_keys) > 1 and i == len(header_keys) -1) 
                     
-                    # For import/export, the second and third columns are often Quantidade and Valor US$
                     if option_code in ("opt_05", "opt_06") and \
                        ((len(header_keys) > 1 and original_key == header_keys[1]) or \
                         (len(header_keys) > 2 and original_key == header_keys[2])):
@@ -260,14 +245,13 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
                     else:
                         cleaned_value = value_str
                 
-                # Handle splitting of the key if it contains "__"
                 if "__" in original_key:
                     parts = original_key.split("__", 1)
-                    base_name = parts[0]  # e.g., "quantidade"
-                    unit = parts[1]       # e.g., "kg"
+                    base_name = parts[0] 
+                    unit = parts[1]      
                     
-                    current_row_data[base_name] = cleaned_value # Store the (potentially numeric) value
-                    current_row_data[f"unidade_{base_name}"] = unit # Store the unit, e.g., "unidade_quantidade"
+                    current_row_data[base_name] = cleaned_value 
+                    current_row_data[f"unidade_{base_name}"] = unit 
                 else:
                     current_row_data[original_key] = cleaned_value
         
@@ -290,85 +274,87 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         "dados": dados_coletados
     }
 
-if __name__ == '__main__':
+# Função para encapsular a lógica de raspagem principal
+def run_full_scrape(output_filepath: str = None) -> list:
     MAIN_OPTIONS_TO_SCRAPE = ["opt_02", "opt_03", "opt_04", "opt_05", "opt_06"]
-    # For testing:
-    # MAIN_OPTIONS_TO_SCRAPE = ["opt_03"] # Test Processamento
-    # MAIN_OPTIONS_TO_SCRAPE = ["opt_04"] # Test Comercializacao
-    # MAIN_OPTIONS_TO_SCRAPE = ["opt_05"] # Test Importacao
-    # MAIN_OPTIONS_TO_SCRAPE = ["opt_06"] # Test Exportacao
-
     all_scraped_data = []
-    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = 2023 
+    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = 2023
     FALLBACK_MIN_YEAR = 2023
-    FALLBACK_MAX_YEAR = 2023 
+    FALLBACK_MAX_YEAR = 2023
 
     for opt_code in MAIN_OPTIONS_TO_SCRAPE:
-        print(f"\n>>> Processing Main Option Code: {opt_code} <<<")
-        
+        logger.info(f"\n>>> Processing Main Option Code: {opt_code} <<<")
         min_year_meta, max_year_meta, sub_options_list, main_opt_display_name = get_page_metadata(opt_code, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
-        
-        print(f"Descriptive name for {opt_code}: {main_opt_display_name}")
+        logger.info(f"Descriptive name for {opt_code}: {main_opt_display_name}")
 
         current_min_year = 2023 
         current_max_year = max_year_meta if max_year_meta is not None else FALLBACK_MAX_YEAR
         
-        # Override for testing specific year/option
-        # current_min_year = 2023
-        # current_max_year = 2023
-        # if opt_code == "opt_05":
-        #     current_min_year = 2023
-        #     current_max_year = 2023
-
-
-        print(f"Scraping {opt_code} ({main_opt_display_name}) for years: {current_min_year} to {current_max_year}")
+        logger.info(f"Scraping {opt_code} ({main_opt_display_name}) for years: {current_min_year} to {current_max_year}")
         if sub_options_list:
-            print(f"Found suboptions: {[(s['code'], s['name']) for s in sub_options_list]}")
+            logger.info(f"Found suboptions: {[(s['code'], s['name']) for s in sub_options_list]}")
         else:
-            print(f"No suboptions found for {opt_code} ({main_opt_display_name}).")
+            logger.info(f"No suboptions found for {opt_code} ({main_opt_display_name}).")
 
         for year_to_scrape in range(current_min_year, current_max_year + 1):
             if not sub_options_list:
-                print(f"\n--- Scraping: {opt_code} ({main_opt_display_name}) | Ano: {year_to_scrape} ---")
-                time.sleep(0.5) 
+                logger.info(f"\n--- Scraping: {opt_code} ({main_opt_display_name}) | Ano: {year_to_scrape} ---")
+                time.sleep(0.5)
                 scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, None,
                                                           json_aba_name=main_opt_display_name,
                                                           json_subopcao_name=None)
                 if scraped_data_item and scraped_data_item.get("dados"):
                     all_scraped_data.append(scraped_data_item)
                 elif scraped_data_item:
-                    print(f"No data rows found for {opt_code} ({main_opt_display_name}) for year {year_to_scrape}")
+                    logger.info(f"No data rows found for {opt_code} ({main_opt_display_name}) for year {year_to_scrape}")
             else:
                 for sub_opt_detail in sub_options_list:
-                    # Test specific suboption:
-                    # if opt_code == "opt_03" and sub_opt_detail['code'] != "subopt_01": continue
-                    # if opt_code == "opt_05" and sub_opt_detail['code'] != "subopt_01": continue
-
-
-                    print(f"\n--- Scraping: {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) | Ano: {year_to_scrape} ---")
-                    time.sleep(0.5) 
+                    logger.info(f"\n--- Scraping: {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) | Ano: {year_to_scrape} ---")
+                    time.sleep(0.5)
                     scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, sub_opt_detail['code'],
                                                               json_aba_name=main_opt_display_name,
                                                               json_subopcao_name=sub_opt_detail['name'])
                     if scraped_data_item and scraped_data_item.get("dados"):
                         all_scraped_data.append(scraped_data_item)
                     elif scraped_data_item:
-                        print(f"No data rows for {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) for year {year_to_scrape}")
-    
+                        logger.info(f"No data rows for {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) for year {year_to_scrape}")
+
     total_entries = len(all_scraped_data)
     total_individual_records = sum(len(item.get('dados', [])) for item in all_scraped_data)
 
-    print(f"\n\nProcessamento Concluído.")
-    print(f"Total de combinações (ano/aba/subopção) com dados: {total_entries}")
-    print(f"Total de registros individuais de dados (linhas de tabela): {total_individual_records}")
+    logger.info(f"\n\nProcessamento Concluído.")
+    logger.info(f"Total de combinações (ano/aba/subopção) com dados: {total_entries}")
+    logger.info(f"Total de registros individuais de dados (linhas de tabela): {total_individual_records}")
 
-    if all_scraped_data:
-        actual_min_year_scraped = min((item['ano'] for item in all_scraped_data if item.get('ano') is not None), default=FALLBACK_MIN_YEAR)
-        actual_max_year_scraped = max((item['ano'] for item in all_scraped_data if item.get('ano') is not None), default=FALLBACK_MAX_YEAR)
-        
-        file_out_name = f"dados_embrapa_vitibrasil_{actual_min_year_scraped}_a_{actual_max_year_scraped}_descritivo.json"
-        with open(file_out_name, 'w', encoding='utf-8') as f:
-            json.dump(all_scraped_data, f, ensure_ascii=False, indent=2)
-        print(f"Dados salvos em: {file_out_name}")
-    else:
-        print("Nenhum dado foi coletado.")
+    if all_scraped_data and output_filepath: # Salva o JSON apenas se output_filepath for fornecido
+        try:
+            output_dir = os.path.dirname(output_filepath)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+
+            with open(output_filepath, 'w', encoding='utf-8') as f:
+                json.dump(all_scraped_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Dados raspados também salvos em: {output_filepath}")
+        except Exception as e:
+            logger.error(f"Erro ao salvar arquivo JSON de cache em {output_filepath}: {e}")
+    elif not all_scraped_data and output_filepath: # Informa se output_filepath foi dado mas não há dados
+        logger.warning("Nenhum dado foi coletado para salvar no arquivo JSON.")
+
+    return all_scraped_data
+
+if __name__ == '__main__':
+    # Este bloco é para execução direta do script, útil para testes.
+    # O serviço chamará run_full_scrape(output_filepath=None)
+    
+    # Exemplo de como salvar um arquivo JSON ao executar diretamente:
+    actual_min_year_scraped = 2023 
+    actual_max_year_scraped = 2023
+    file_out_name = f"dados_embrapa_vitibrasil_{actual_min_year_scraped}_a_{actual_max_year_scraped}_descritivo_TEST.json"
+    logger.info(f"Executando raspagem de teste, saída para: {file_out_name}")
+    scraped_results = run_full_scrape(output_filepath=file_out_name)
+    
+    # Exemplo de execução sem salvar arquivo JSON (comportamento padrão para o serviço):
+    # print("Executando raspagem de teste (sem salvar em arquivo JSON por padrão)...")
+    # scraped_results = run_full_scrape()
+    if not scraped_results:
+        logger.info("Nenhum dado foi coletado durante a execução de teste.")

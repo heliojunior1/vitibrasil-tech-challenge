@@ -4,7 +4,12 @@ from src.app.web.routes_auth import router as auth_router
 from src.app.config.database import Base, engine
 from src.app.models.user import User
 from src.app.models.viticulture import Viticultura
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
 
 Base.metadata.create_all(bind=engine)
 
