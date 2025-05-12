@@ -140,6 +140,8 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
 
 Este projeto inclui um arquivo [`render.yaml`](render.yaml) para facilitar o deploy na plataforma [Render](https://render.com/).
 
+A criacao é feito no render. Precisar adicionar as variaveis JWT_SECRET e DATABASE_URL 
+
 ## Realizar testes
 python -m pytest
 
