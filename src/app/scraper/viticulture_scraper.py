@@ -7,457 +7,354 @@ import unicodedata
 import re
 import os
 import logging
-from typing import List, Optional, Dict, Any, Tuple
+logger = logging.getLogger(__name__) 
 
+CACHED_DATA_FILENAME = "vitibrasil_data_cache.json"
 
-logger = logging.getLogger(__name__)
-
-# URL base para as requisições
-BASE_URL = "http://vitibrasil.cnpuv.embrapa.br/index.php"
-
-# Mapeamento de códigos de opção para nomes de abas (normalizados)
-# Estes são os nomes que esperamos após a normalização.
-# A função get_page_metadata irá descobrir os nomes reais e normalizá-los.
-# Esta lista é mais para referência e para a função run_filtered_scrape.
-ALL_KNOWN_OPTIONS = ["opt_01", "opt_02", "opt_03", "opt_04", "opt_05", "opt_06"]
-# opt_01: Resumo (geralmente não tem sub-opções com tabelas de dados anuais)
-# opt_02: Produção
-# opt_03: Processamento
-# opt_04: Comercialização
-# opt_05: Importação
-# opt_06: Exportação
-
-# --- Funções Auxiliares ---
-
-def normalize_text(text: str) -> str:
-    """Normaliza o texto: minúsculas, remove acentos, substitui espaços e hífens por underscore."""
+def normalize_text(text):
     if not text:
-        return ""
-    # Remove acentos
+        return None
+    text = str(text)
     nfkd_form = unicodedata.normalize('NFKD', text)
-    text_sem_acentos = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    # Substitui espaços e hífens por underscore e converte para minúsculas
-    text_normalizado = re.sub(r'[\s-]+', '_', text_sem_acentos).lower()
-    return text_normalizado
+    only_ascii = nfkd_form.encode('ASCII', 'ignore').decode('utf-8')
+    text_cleaned = re.sub(r'[^\w\s\(\)\$\€\,\.-]', '', only_ascii)
+    text_cleaned = text_cleaned.replace('(Kg)', '_kg').replace('(US$)', '_us').replace('(L)', '_l')
+    text_cleaned = re.sub(r'[^\w\s]', '', text_cleaned) 
+    return text_cleaned.strip().lower().replace(" ", "_").replace("-", "_")
 
-def make_request(payload: dict) -> Optional[BeautifulSoup]:
-    """Faz uma requisição POST para a URL base com o payload fornecido."""
-    try:
-        response = requests.post(BASE_URL, data=payload, timeout=20) # Aumentado timeout
-        response.raise_for_status()  # Levanta exceção para erros HTTP
-        return BeautifulSoup(response.content, 'lxml') # Usar lxml para melhor performance
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Erro na requisição para {BASE_URL} com payload {payload}: {e}")
-        return None
-    except Exception as e_gen:
-        logger.error(f"Erro inesperado ao processar requisição para {BASE_URL}: {e_gen}")
-        return None
+def get_page_soup(url, description="page"):
+    """Fetches and parses a page, returns a BeautifulSoup object or None."""
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            # print(f"Fetching {description} from {url} (Attempt {attempt}/{max_retries})")
+            resp = requests.get(url, timeout=(30, 60))
+            resp.raise_for_status()
+            return BeautifulSoup(resp.content, 'lxml')
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching {description} at {url}: {e}")
+            if attempt == max_retries:
+                return None
+            time.sleep(2 * attempt)
+    return None
 
-
-def get_page_metadata(opt_value: str, year_for_suboptions: int) -> Tuple[Optional[int], Optional[int], List[Dict[str, str]], Optional[str]]:
+def get_page_metadata(option_code, reference_year=2023):
     """
-    Obtém metadados da página: anos disponíveis, sub-opções e nome da aba principal.
-    O 'year_for_suboptions' é usado para carregar a página e descobrir as sub-opções.
+    Fetches metadata for a given option: year range, suboptions, and descriptive names.
+    Returns (min_year, max_year, list_of_suboption_details, main_option_display_name).
+    Each suboption_detail is a dict: {'code': 'subopt_XX', 'name': 'Normalized Display Name'}
     """
-    payload = {'ano': year_for_suboptions, opt_value: ''}
-    soup = make_request(payload)
+    base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php?"
+    meta_url_params = {'ano': reference_year, 'opcao': option_code}
+    soup = get_page_soup(base_url + urlencode(meta_url_params), description=f"metadata for {option_code}")
+
     if not soup:
-        return None, None, [], None
+        logger.info(f"Could not fetch metadata page for {option_code} at year {reference_year}")
+        return None, None, [], normalize_text(option_code) # Fallback display name
 
     min_year, max_year = None, None
-    year_select = soup.find('select', attrs={'onchange': 'submit()'}) # O select de ano
-    if year_select:
-        options = year_select.find_all('option')
-        years = sorted([int(opt.get('value')) for opt in options if opt.get('value').isdigit()])
-        if years:
-            min_year = years[0]
-            max_year = years[-1]
+    main_option_display_name = normalize_text(option_code) # Fallback
 
-    sub_options_list = []
-    # Tenta encontrar o nome da aba principal e as sub-opções
-    # As sub-opções são tipicamente inputs do tipo 'submit' com name começando com 'subopt_'
-    # e value contendo o nome da sub-opção.
-    # O nome da aba principal é o 'value' do input 'submit' que tem o 'name' igual a opt_value
-    main_opt_name_normalized = None
-    
-    forms = soup.find_all('form', attrs={'name': 'form'})
-    for form in forms:
-        # Encontrar o nome da aba principal
-        main_opt_input = form.find('input', {'name': opt_value, 'type': 'submit'})
-        if main_opt_input and main_opt_input.get('value'):
-            main_opt_name_normalized = normalize_text(main_opt_input.get('value'))
+    main_opt_button = soup.find('button', {'name': 'opcao', 'value': option_code})
+    if main_opt_button and main_opt_button.get_text(strip=True):
+        main_option_display_name = normalize_text(main_opt_button.get_text(strip=True))
+    else:
+        page_title_tag = soup.find('p', class_='text_center')
+        if page_title_tag:
+            title_text = page_title_tag.get_text(strip=True)
+            if " - " in title_text: 
+                general_part = title_text.split(" - ")[0]
+                main_option_display_name = normalize_text(general_part.strip())
+            else: 
+                match_title = re.match(r"^(.*?)(?:\[\d{4}\])?$", title_text)
+                if match_title and match_title.group(1).strip():
+                    main_option_display_name = normalize_text(match_title.group(1).strip())
 
-        # Encontrar sub-opções
-        sub_option_inputs = form.find_all('input', {'type': 'submit', 'name': lambda x: x and x.startswith('subopt_')})
-        for sub_input in sub_option_inputs:
-            sub_opt_name = sub_input.get('value')
-            sub_opt_code = sub_input.get('name')
-            if sub_opt_name and sub_opt_code:
-                sub_options_list.append({
-                    'name': normalize_text(sub_opt_name), # Normaliza o nome da sub-opção
-                    'code': sub_opt_code
-                })
-    
-    if not main_opt_name_normalized and opt_value == "opt_01": # Caso especial para "Resumo"
-        main_opt_name_normalized = "resumo"
+    year_label = soup.find('label', class_='lbl_pesq')
+    if year_label and year_label.string:
+        match_year_range = re.search(r'\[(\d{4})-(\d{4})\]', year_label.string)
+        if match_year_range:
+            min_year = int(match_year_range.group(1))
+            max_year = int(match_year_range.group(2))
 
+    sub_options_details = []
+    suboption_elements = soup.find_all(['button', 'input'], attrs={'name': 'subopcao'})
 
-    logger.debug(f"Metadados para {opt_value} (ano {year_for_suboptions}): Anos [{min_year}-{max_year}], "
-                 f"Aba Principal Normalizada: '{main_opt_name_normalized}', Sub-opções: {len(sub_options_list)}")
-    return min_year, max_year, sub_options_list, main_opt_name_normalized
-
-
-def get_data_from_embrapa(
-    year: int,
-    main_option_code: str,
-    sub_option_code: Optional[str] = None,
-    json_aba_name: Optional[str] = None, # Nome normalizado da aba principal para o JSON
-    json_subopcao_name: Optional[str] = None # Nome normalizado da sub-opção para o JSON
-) -> Optional[Dict[str, Any]]:
-    """
-    Busca dados de uma tabela específica da Embrapa para um ano, opção principal e, opcionalmente, sub-opção.
-    Retorna um dicionário estruturado ou None em caso de falha.
-    """
-    payload = {'ano': year, main_option_code: ''}
-    if sub_option_code:
-        payload[sub_option_code] = '' # Adiciona a sub-opção ao payload se fornecida
-
-    soup = make_request(payload)
-    if not soup:
-        logger.error(f"Falha ao obter soup para ano {year}, opção {main_option_code}, sub-opção {sub_option_code}")
-        return None
-
-    # Encontra todas as tabelas com a classe 'tb_base'
-    tables = soup.find_all('table', class_='tb_base')
-    if not tables:
-        logger.info(f"Nenhuma tabela 'tb_base' encontrada para ano {year}, opção {main_option_code}, sub-opção {sub_option_code}.")
-        # Retorna uma estrutura indicando que a página foi acessada mas sem dados tabulares
-        return {
-            "ano": year,
-            "aba": json_aba_name or normalize_text(main_option_code), # Usa o nome normalizado fornecido ou normaliza o código
-            "subopcao": json_subopcao_name if sub_option_code else None,
-            "dados": [] # Lista vazia indica que não foram encontradas linhas de dados
-        }
-
-    table_data_list = []
-    for table_index, table in enumerate(tables):
-        headers = [normalize_text(th.text.strip()) for th in table.find_all('th', class_='tb_th')]
-        if not headers: # Algumas tabelas podem não ter th, mas sim td.tb_cont na primeira linha como cabeçalho
-            first_row_tds = table.find('tr').find_all('td', class_='tb_cont')
-            if first_row_tds and len(first_row_tds) > 1: # Heurística: se tem múltiplos tds na primeira linha
-                 headers = [normalize_text(td.text.strip()) for td in first_row_tds]
-
-        if not headers:
-            logger.warning(f"Cabeçalhos não encontrados para tabela {table_index} em {year}, {main_option_code}, {sub_option_code}")
+    for btn in suboption_elements:
+        if btn.name == 'input' and btn.get('type') != 'submit':
             continue
 
-
-        rows_data = []
-        # Itera sobre as linhas da tabela, ignorando a primeira se for cabeçalho (já processado)
-        # As linhas de dados geralmente têm a classe 'tr_dados_altcolor' ou 'tr_dados_color'
-        data_rows = table.find_all('tr', class_=lambda x: x and ('tr_dados_altcolor' in x or 'tr_dados_color' in x))
+        sub_code = btn.get('value')
+        sub_name_text = btn.get_text(strip=True) if btn.name == 'button' else btn.get('value')
         
-        # Se não encontrou com classes específicas, tenta pegar todas as 'tr' e pular a primeira se for cabeçalho
-        if not data_rows:
-            all_rows = table.find_all('tr')
-            if all_rows and headers: # Se temos cabeçalhos, pulamos a primeira linha
-                data_rows = all_rows[1:]
-            elif all_rows: # Sem cabeçalhos claros, pegamos todas as linhas
-                data_rows = all_rows
+        if btn.name == 'input' and btn.get('type') == 'submit':
+             sub_name_text = btn.get('value')
+
+        if sub_code and sub_name_text:
+            sub_options_details.append({'code': sub_code, 'name': normalize_text(sub_name_text)})
+            
+    if (min_year is None or max_year is None) and sub_options_details:
+        meta_url_params_with_sub = {'ano': reference_year, 'opcao': option_code, 'subopcao': sub_options_details[0]['code']}
+        soup_with_sub = get_page_soup(base_url + urlencode(meta_url_params_with_sub), description=f"metadata for {option_code} with suboption")
+        if soup_with_sub:
+            year_label_sub = soup_with_sub.find('label', class_='lbl_pesq')
+            if year_label_sub and year_label_sub.string:
+                match_sub = re.search(r'\[(\d{4})-(\d{4})\]', year_label_sub.string)
+                if match_sub:
+                    min_year = int(match_sub.group(1))
+                    max_year = int(match_sub.group(2))
+    
+    if soup and (min_year is None or max_year is None):
+        page_center_text_for_year = soup.find('p', class_='text_center')
+        if page_center_text_for_year and page_center_text_for_year.string:
+            match_title_year = re.search(r'\[(\d{4})\]', page_center_text_for_year.string)
+            if match_title_year:
+                year_from_title = int(match_title_year.group(1))
+                min_year = min_year or year_from_title 
+                max_year = max_year or year_from_title
+
+    return min_year, max_year, sub_options_details, main_option_display_name
 
 
-        for row in data_rows:
-            columns = row.find_all('td', class_='tb_cont')
-            if len(columns) == len(headers): # Garante que o número de colunas corresponde aos cabeçalhos
-                row_dict = {}
-                # O primeiro header é 'produto' ou 'cultivar', o resto são 'ano_xxxx' ou 'quantidade'/'valor'
-                # Para simplificar, vamos usar os headers normalizados como chaves
-                for i, col in enumerate(columns):
-                    header_key = headers[i]
-                    # Tenta converter para float se for numérico, senão mantém como string
-                    value_text = col.text.strip()
-                    if value_text == '-': # Tratar hífen como nulo ou zero, dependendo da preferência. Aqui, como None.
-                        row_dict[header_key] = None
-                    else:
+def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = None,
+                          json_aba_name: str = None,
+                          json_subopcao_name: str = None):
+    base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php?"
+    params = {'ano': year, 'opcao': option_code}
+    if suboption_code:
+        params['subopcao'] = suboption_code
+    
+    url = base_url + urlencode(params)
+    page_description = f"data for {option_code}"
+    if suboption_code:
+        page_description += f"/{suboption_code}"
+    page_description += f" year {year}"
+
+    soup = get_page_soup(url, description=page_description)
+
+    final_aba_name = json_aba_name if json_aba_name else normalize_text(option_code)
+    final_subopcao_name = json_subopcao_name
+
+    if not soup:
+        logger.info(f"Falha ao carregar dados de {url}")
+        return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
+
+    tabela_bs = soup.select_one("table.tb_dados")
+    if not tabela_bs:
+        tabela_bs = soup.find(lambda tag: tag.name == "table" and "tb_dados" in (tag.get('class') or []))
+    
+    if not tabela_bs:
+        logger.info(f"Tabela de dados não encontrada em {url}")
+        return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
+
+    header_cells_elements = []
+    start_index_for_rows = 0 
+
+    header_row_thead = tabela_bs.select_one("thead tr")
+    if header_row_thead:
+        header_cells_elements = header_row_thead.find_all(['th', 'td'])
+    else: 
+        all_table_rows_for_header = tabela_bs.find_all('tr')
+        if not all_table_rows_for_header:
+            return {"ano": year, "aba": final_aba_name, "subopcao": final_subopcao_name, "dados": []}
+        
+        for r_idx, r_loop in enumerate(all_table_rows_for_header):
+            potential_headers = r_loop.find_all(['th', 'td'])
+            if any(ph.name == 'th' for ph in potential_headers) or r_loop.find('strong'):
+                header_cells_elements = potential_headers
+                start_index_for_rows = r_idx + 1
+                break
+        if not header_cells_elements and all_table_rows_for_header: 
+            header_cells_elements = all_table_rows_for_header[0].find_all(['th', 'td'])
+            start_index_for_rows = 1
+    
+    header_keys = [normalize_text(cell.get_text(strip=True)) for cell in header_cells_elements]
+    header_keys = [hk for hk in header_keys if hk]
+
+    if not header_keys:
+        logger.info(f"Alerta: Não foi possível extrair nomes de cabeçalho da tabela em {url}")
+        first_data_row_cols = 0
+        body_for_col_count = tabela_bs.find('tbody')
+        rows_for_col_count = body_for_col_count.find_all('tr') if body_for_col_count else tabela_bs.find_all('tr')[start_index_for_rows:]
+        if rows_for_col_count:
+            first_data_row_cols_elements = rows_for_col_count[0].find_all('td')
+            if first_data_row_cols_elements : first_data_row_cols = len(first_data_row_cols_elements)
+        
+        if first_data_row_cols > 0:
+            header_keys = [f"coluna_{i+1}" for i in range(first_data_row_cols)]
+        else: 
+            header_keys = ["coluna_1", "coluna_2"] 
+        logger.info(f"Usando cabeçalhos genéricos: {header_keys}")
+
+    dados_coletados = []
+    categoria_contextual = None 
+
+    body = tabela_bs.find('tbody')
+    rows_to_parse = body.find_all('tr') if body else tabela_bs.find_all('tr')[start_index_for_rows:]
+
+    for row in rows_to_parse:
+        cols = row.find_all('td')
+
+        if not cols: 
+            if row.find_all('th'): continue 
+            continue
+
+        if (len(cols) == 1 and (cols[0].has_attr('colspan') or cols[0].find('strong'))) or \
+           (option_code == "opt_03" and len(cols) >= 2 and 'tb_item' in cols[0].get('class', []) and 'tb_item' in cols[1].get('class', [])):
+            
+            text_content = cols[0].get_text(strip=True)
+            if text_content and not text_content.lower().startswith("total") and not text_content.lower().startswith("subtotal"):
+                categoria_contextual = text_content 
+            continue 
+
+        current_row_data = {}
+        is_first_col_tb_item = False
+        if len(cols) > 0 and 'tb_item' in cols[0].get('class', []):
+            is_first_col_tb_item = True
+        
+        first_cell_text_lower = cols[0].get_text(strip=True).lower() if len(cols) > 0 else ""
+        if first_cell_text_lower.startswith("total") or first_cell_text_lower.startswith("subtotal"):
+            continue
+        
+        if len(cols) < len(header_keys) and len(cols) < 2:
+            continue
+
+        for i, cell_element in enumerate(cols):
+            if i < len(header_keys): 
+                original_key = header_keys[i] 
+                value_str = cell_element.get_text(strip=True)
+                
+                cleaned_value = None
+                if value_str == '-' or value_str == '':
+                    cleaned_value = None 
+                else:
+                    is_numeric_candidate = any(k_word in original_key for k_word in ['quantidade', 'valor', 'kg', 'us', 'l', '_ano', 'coluna_2']) or \
+                                           (len(header_keys) > 1 and i == len(header_keys) -1) 
+                    
+                    if option_code in ("opt_05", "opt_06") and \
+                       ((len(header_keys) > 1 and original_key == header_keys[1]) or \
+                        (len(header_keys) > 2 and original_key == header_keys[2])):
+                        is_numeric_candidate = True
+
+                    if is_numeric_candidate:
                         try:
-                            # Remove pontos de milhar antes de converter para float
-                            cleaned_value = value_text.replace('.', '').replace(',', '.')
-                            row_dict[header_key] = float(cleaned_value)
+                            val_clean_num = value_str.replace('.', '').replace(',', '.')
+                            cleaned_value = float(val_clean_num)
                         except ValueError:
-                            row_dict[header_key] = value_text # Mantém como string se não for conversível
-                rows_data.append(row_dict)
-            elif columns: # Log se o número de colunas não bate mas existem colunas
-                 logger.warning(f"Número de colunas ({len(columns)}) não corresponde aos cabeçalhos ({len(headers)}) na tabela {table_index} para {year}, {main_option_code}, {sub_option_code}. Linha ignorada.")
+                            cleaned_value = value_str 
+                    else:
+                        cleaned_value = value_str
+                
+                if "__" in original_key:
+                    parts = original_key.split("__", 1)
+                    base_name = parts[0] 
+                    unit = parts[1]      
+                    
+                    current_row_data[base_name] = cleaned_value 
+                    current_row_data[f"unidade_{base_name}"] = unit 
+                else:
+                    current_row_data[original_key] = cleaned_value
+        
+        if not current_row_data or not any(v is not None for v in current_row_data.values()):
+            continue
 
+        current_row_data["categoria_tabela"] = categoria_contextual 
 
-        if rows_data: # Adiciona apenas se encontrou dados para esta tabela
-            table_data_list.extend(rows_data) # Usar extend para mesclar listas de dicionários se houver múltiplas tabelas com os mesmos headers
-
-    if not table_data_list:
-        logger.info(f"Nenhum dado tabular processado para ano {year}, opção {main_option_code}, sub-opção {sub_option_code} apesar de tabelas 'tb_base' existirem.")
-
+        if option_code in ("opt_02", "opt_04"):
+            if is_first_col_tb_item and len(cols) > 0:
+                 new_context_candidate = cols[0].get_text(strip=True)
+                 if new_context_candidate and not new_context_candidate.lower().startswith("total"):
+                    categoria_contextual = new_context_candidate
+        dados_coletados.append(current_row_data)
+    
     return {
         "ano": year,
-        "aba": json_aba_name or normalize_text(main_option_code),
-        "subopcao": json_subopcao_name if sub_option_code else None,
-        "dados": table_data_list
+        "aba": final_aba_name,
+        "subopcao": final_subopcao_name,
+        "dados": dados_coletados
     }
 
-# --- Funções de Raspagem Principais ---
-
+# Função para encapsular a lógica de raspagem principal
 def run_full_scrape(output_filepath: str = None) -> list:
-    """
-    Executa a raspagem completa de todos os dados de todas as opções e anos disponíveis.
-    Salva os dados em um arquivo JSON se output_filepath for fornecido.
-    Retorna uma lista de todos os dados raspados.
-    """
+    MAIN_OPTIONS_TO_SCRAPE = ["opt_02", "opt_03", "opt_04", "opt_05", "opt_06"]
     all_scraped_data = []
-    # O ano padrão para descobrir metadados (sub-opções, etc.)
-    # Usar um ano recente é geralmente uma boa ideia.
-    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = datetime.now().year - 1 # Ano anterior como padrão
+    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = 2023
+    FALLBACK_MIN_YEAR = 2023
+    FALLBACK_MAX_YEAR = 2023
 
-    for opt_code in ALL_KNOWN_OPTIONS:
-        logger.info(f"\n>>> Processando Opção Principal: {opt_code} <<<")
+    for opt_code in MAIN_OPTIONS_TO_SCRAPE:
+        logger.info(f"\n>>> Processing Main Option Code: {opt_code} <<<")
+        min_year_meta, max_year_meta, sub_options_list, main_opt_display_name = get_page_metadata(opt_code, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
+        logger.info(f"Descriptive name for {opt_code}: {main_opt_display_name}")
+
+        current_min_year = 2023 
+        current_max_year = max_year_meta if max_year_meta is not None else FALLBACK_MAX_YEAR
         
-        # Obtém metadados para a opção principal (anos disponíveis, sub-opções)
-        min_year, max_year, sub_options, main_opt_name_norm = get_page_metadata(opt_code, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
+        logger.info(f"Scraping {opt_code} ({main_opt_display_name}) for years: {current_min_year} to {current_max_year}")
+        if sub_options_list:
+            logger.info(f"Found suboptions: {[(s['code'], s['name']) for s in sub_options_list]}")
+        else:
+            logger.info(f"No suboptions found for {opt_code} ({main_opt_display_name}).")
 
-        if min_year is None or max_year is None:
-            logger.warning(f"Não foi possível determinar o range de anos para a opção {opt_code}. Pulando.")
-            continue
-        
-        if not main_opt_name_norm:
-            logger.warning(f"Não foi possível determinar o nome normalizado da aba para {opt_code}. Pulando.")
-            continue
-
-        logger.info(f"Raspando dados para '{main_opt_name_norm}' (código: {opt_code}) de {min_year} a {max_year}")
-
-        for year_to_scrape in range(min_year, max_year + 1):
-            if not sub_options or opt_code == "opt_01": # opt_01 (Resumo) geralmente não tem sub-opções com tabelas de dados
-                logger.info(f"\n--- Raspando: {main_opt_name_norm} | Ano: {year_to_scrape} ---")
-                time.sleep(0.5) # Delay para não sobrecarregar o servidor
+        for year_to_scrape in range(current_min_year, current_max_year + 1):
+            if not sub_options_list:
+                logger.info(f"\n--- Scraping: {opt_code} ({main_opt_display_name}) | Ano: {year_to_scrape} ---")
+                time.sleep(0.5)
                 scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, None,
-                                                          json_aba_name=main_opt_name_norm,
+                                                          json_aba_name=main_opt_display_name,
                                                           json_subopcao_name=None)
                 if scraped_data_item and scraped_data_item.get("dados"):
                     all_scraped_data.append(scraped_data_item)
-                elif scraped_data_item: # Item foi retornado mas sem dados (lista vazia)
-                    logger.info(f"Nenhuma linha de dados encontrada para {main_opt_name_norm} no ano {year_to_scrape}")
-
-            else: # Se existem sub-opções
-                for sub_opt in sub_options:
-                    sub_opt_code_val = sub_opt['code']
-                    sub_opt_name_norm = sub_opt['name'] # Já está normalizado
-                    logger.info(f"\n--- Raspando: {main_opt_name_norm} / {sub_opt_name_norm} | Ano: {year_to_scrape} ---")
-                    time.sleep(0.5) # Delay
-                    scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, sub_opt_code_val,
-                                                              json_aba_name=main_opt_name_norm,
-                                                              json_subopcao_name=sub_opt_name_norm)
+                elif scraped_data_item:
+                    logger.info(f"No data rows found for {opt_code} ({main_opt_display_name}) for year {year_to_scrape}")
+            else:
+                for sub_opt_detail in sub_options_list:
+                    logger.info(f"\n--- Scraping: {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) | Ano: {year_to_scrape} ---")
+                    time.sleep(0.5)
+                    scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, sub_opt_detail['code'],
+                                                              json_aba_name=main_opt_display_name,
+                                                              json_subopcao_name=sub_opt_detail['name'])
                     if scraped_data_item and scraped_data_item.get("dados"):
                         all_scraped_data.append(scraped_data_item)
                     elif scraped_data_item:
-                        logger.info(f"Nenhuma linha de dados para {main_opt_name_norm}/{sub_opt_name_norm} no ano {year_to_scrape}")
-    
+                        logger.info(f"No data rows for {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) for year {year_to_scrape}")
+
     total_entries = len(all_scraped_data)
     total_individual_records = sum(len(item.get('dados', [])) for item in all_scraped_data)
 
-    logger.info(f"\n\nProcessamento de Raspagem Completa Concluído.")
+    logger.info(f"\n\nProcessamento Concluído.")
     logger.info(f"Total de combinações (ano/aba/subopção) com dados: {total_entries}")
     logger.info(f"Total de registros individuais de dados (linhas de tabela): {total_individual_records}")
 
-    if all_scraped_data and output_filepath:
+    if all_scraped_data and output_filepath: # Salva o JSON apenas se output_filepath for fornecido
         try:
             output_dir = os.path.dirname(output_filepath)
-            if output_dir and not os.path.exists(output_dir): # Cria o diretório se não existir
+            if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
+
             with open(output_filepath, 'w', encoding='utf-8') as f:
                 json.dump(all_scraped_data, f, ensure_ascii=False, indent=2)
             logger.info(f"Dados raspados também salvos em: {output_filepath}")
         except Exception as e:
             logger.error(f"Erro ao salvar arquivo JSON de cache em {output_filepath}: {e}")
-    elif not all_scraped_data and output_filepath:
-         logger.warning("Nenhum dado foi coletado para salvar no arquivo JSON.")
-         
+    elif not all_scraped_data and output_filepath: # Informa se output_filepath foi dado mas não há dados
+        logger.warning("Nenhum dado foi coletado para salvar no arquivo JSON.")
+
     return all_scraped_data
-
-
-def run_filtered_scrape(
-    target_categories_normalized: List[str],
-    start_year_filter: int,
-    end_year_filter: int,
-    output_filepath: str = None
-) -> list:
-    """
-    Executa a raspagem de dados para categorias e um intervalo de anos específicos.
-    Salva os dados em um arquivo JSON se output_filepath for fornecido.
-    Retorna uma lista dos dados raspados.
-    """
-    all_scraped_data = []
-    # Use o ano final do filtro do usuário para descobrir metadados,
-    # pois é mais provável que reflita as subopções atuais e os intervalos de anos disponíveis.
-    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = end_year_filter
-
-    options_to_scrape_details = [] # Armazena detalhes das opções que correspondem às categorias do usuário
-
-    logger.info(f"Tentando mapear categorias solicitadas: {target_categories_normalized} para códigos de opção da Embrapa.")
-    
-    # Primeiro, obter metadados para todas as opções conhecidas para mapear nomes normalizados para códigos
-    discovered_options_map = {} # Mapa de nome normalizado para código de opção
-    for opt_code_candidate in ALL_KNOWN_OPTIONS:
-        _, _, _, main_opt_name_candidate_norm = get_page_metadata(opt_code_candidate, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
-        if main_opt_name_candidate_norm:
-            discovered_options_map[main_opt_name_candidate_norm] = opt_code_candidate
-            logger.debug(f"Descoberto: '{main_opt_name_candidate_norm}' -> {opt_code_candidate}")
-        else:
-            logger.warning(f"Não foi possível obter o nome normalizado para o código de opção {opt_code_candidate} usando o ano {DEFAULT_YEAR_FOR_METADATA_DISCOVERY}.")
-
-
-    for target_cat_norm in target_categories_normalized:
-        if target_cat_norm in discovered_options_map:
-            opt_code = discovered_options_map[target_cat_norm]
-            options_to_scrape_details.append({
-                "code": opt_code,
-                "display_name_normalized": target_cat_norm 
-            })
-            logger.info(f"Categoria solicitada '{target_cat_norm}' mapeada para o código de opção da Embrapa '{opt_code}'.")
-        else:
-            logger.warning(f"Categoria solicitada '{target_cat_norm}' não corresponde a nenhuma aba principal conhecida/descoberta da Embrapa. Será ignorada.")
-            logger.debug(f"Opções descobertas disponíveis: {list(discovered_options_map.keys())}")
-
-
-    if not options_to_scrape_details:
-        logger.warning(f"Nenhum código de opção da Embrapa correspondente encontrado para as categorias solicitadas: {target_categories_normalized}.")
-        return []
-
-    for opt_detail in options_to_scrape_details:
-        opt_code = opt_detail["code"]
-        main_opt_display_name_norm = opt_detail["display_name_normalized"] # Este nome já está normalizado
-
-        logger.info(f"\n>>> Processando Opção Filtrada: {opt_code} ({main_opt_display_name_norm}) <<<")
-        
-        # Obter metadados novamente para a opção correspondente para determinar seu intervalo de anos e subopções específicos.
-        min_year_meta, max_year_meta, sub_options_list, _ = get_page_metadata(opt_code, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
-
-        if min_year_meta is None or max_year_meta is None:
-            logger.warning(f"Não foi possível determinar o intervalo de anos para a opção {opt_code} ({main_opt_display_name_norm}). Pulando esta categoria.")
-            continue
-
-        # Determinar o intervalo de anos real para raspagem: interseção da solicitação do usuário e disponibilidade da opção.
-        actual_scrape_start_year = max(start_year_filter, min_year_meta)
-        actual_scrape_end_year = min(end_year_filter, max_year_meta)
-        
-        if actual_scrape_start_year > actual_scrape_end_year:
-            logger.info(f"Pulando {opt_code} ({main_opt_display_name_norm}): intervalo de anos solicitado [{start_year_filter}-{end_year_filter}] "
-                        f"não se sobrepõe ao intervalo de dados disponível da opção [{min_year_meta}-{max_year_meta}]. "
-                        f"Intervalo efetivo para esta opção seria [{actual_scrape_start_year}-{actual_scrape_end_year}].")
-            continue
-
-        logger.info(f"Raspando {opt_code} ({main_opt_display_name_norm}) para os anos: {actual_scrape_start_year} a {actual_scrape_end_year}")
-        if sub_options_list:
-            logger.info(f"Subopções encontradas para {main_opt_display_name_norm}: {[(s['code'], s['name']) for s in sub_options_list]}")
-        else:
-            logger.info(f"Nenhuma subopção encontrada para {opt_code} ({main_opt_display_name_norm}).")
-
-        for year_to_scrape in range(actual_scrape_start_year, actual_scrape_end_year + 1):
-            if not sub_options_list or opt_code == "opt_01": # opt_01 (Resumo) geralmente não tem sub-opções com tabelas de dados
-                logger.info(f"\n--- Raspando: {main_opt_display_name_norm} | Ano: {year_to_scrape} ---")
-                time.sleep(0.5) 
-                scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, None,
-                                                          json_aba_name=main_opt_display_name_norm,
-                                                          json_subopcao_name=None)
-                if scraped_data_item and scraped_data_item.get("dados"):
-                    all_scraped_data.append(scraped_data_item)
-                elif scraped_data_item:
-                    logger.info(f"Nenhuma linha de dados encontrada para {main_opt_display_name_norm} no ano {year_to_scrape}")
-            else:
-                for sub_opt_detail in sub_options_list:
-                    sub_opt_code_val = sub_opt_detail['code']
-                    sub_opt_name_norm = sub_opt_detail['name'] # Já está normalizado
-                    logger.info(f"\n--- Raspando: {main_opt_display_name_norm} / {sub_opt_name_norm} | Ano: {year_to_scrape} ---")
-                    time.sleep(0.5) 
-                    scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, sub_opt_code_val,
-                                                              json_aba_name=main_opt_display_name_norm,
-                                                              json_subopcao_name=sub_opt_name_norm)
-                    if scraped_data_item and scraped_data_item.get("dados"):
-                        all_scraped_data.append(scraped_data_item)
-                    elif scraped_data_item:
-                        logger.info(f"Nenhuma linha de dados para {main_opt_display_name_norm}/{sub_opt_name_norm} no ano {year_to_scrape}")
-    
-    total_entries = len(all_scraped_data)
-    total_individual_records = sum(len(item.get('dados', [])) for item in all_scraped_data)
-
-    logger.info(f"\n\nProcessamento de Raspagem Filtrada Concluído.")
-    logger.info(f"Total de combinações (ano/aba/subopção) com dados: {total_entries}")
-    logger.info(f"Total de registros individuais de dados (linhas de tabela): {total_individual_records}")
-
-    if all_scraped_data and output_filepath:
-        try:
-            output_dir = os.path.dirname(output_filepath)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
-            with open(output_filepath, 'w', encoding='utf-8') as f:
-                json.dump(all_scraped_data, f, ensure_ascii=False, indent=2)
-            logger.info(f"Dados raspados (filtrados) também salvos em: {output_filepath}")
-        except Exception as e:
-            logger.error(f"Erro ao salvar arquivo JSON de cache (filtrado) em {output_filepath}: {e}")
-    elif not all_scraped_data and output_filepath:
-        logger.warning("Nenhum dado foi coletado (filtrado) para salvar no arquivo JSON.")
-        
-    return all_scraped_data
-
 
 if __name__ == '__main__':
-    # Configuração básica de logging para teste local
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+    # Este bloco é para execução direta do script, útil para testes.
+    # O serviço chamará run_full_scrape(output_filepath=None)
     
-    # Teste da raspagem completa
-    logger.info("--- INICIANDO TESTE DE RASPAGEM COMPLETA ---")
-    # Definir um caminho para o arquivo de cache se desejar salvar a saída
-    cache_dir = "data_cache_test"
-    full_scrape_output_file = os.path.join(cache_dir, "vitibrasil_full_data_test.json")
-    # run_full_scrape(output_filepath=full_scrape_output_file)
-    logger.info("--- TESTE DE RASPAGEM COMPLETA CONCLUÍDO ---")
-
-    # Teste da raspagem filtrada
-    logger.info("\n--- INICIANDO TESTE DE RASPAGEM FILTRADA ---")
-    filtered_scrape_output_file = os.path.join(cache_dir, "vitibrasil_filtered_data_test.json")
+    # Exemplo de como salvar um arquivo JSON ao executar diretamente:
+    actual_min_year_scraped = 2023 
+    actual_max_year_scraped = 2023
+    file_out_name = f"dados_embrapa_vitibrasil_{actual_min_year_scraped}_a_{actual_max_year_scraped}_descritivo_TEST.json"
+    logger.info(f"Executando raspagem de teste, saída para: {file_out_name}")
+    scraped_results = run_full_scrape(output_filepath=file_out_name)
     
-    # Exemplo de categorias e anos para o teste filtrado
-    # Lembre-se que as categorias aqui devem ser os nomes normalizados das abas
-    # que você espera que get_page_metadata retorne.
-    # Por exemplo, se a aba é "Produção", o normalizado é "producao".
-    test_categories_norm = ["producao", "comercializacao", "exportacao"] # Usar nomes normalizados
-    test_start_year = 2020
-    test_end_year = 2022
-    
-    # run_filtered_scrape(
-    #     target_categories_normalized=test_categories_norm,
-    #     start_year_filter=test_start_year,
-    #     end_year_filter=test_end_year,
-    #     output_filepath=filtered_scrape_output_file
-    # )
-    logger.info("--- TESTE DE RASPAGEM FILTRADA CONCLUÍDO ---")
-
-    # Teste para uma categoria que pode não existir ou nome diferente
-    logger.info("\n--- INICIANDO TESTE DE RASPAGEM FILTRADA (CATEGORIA INVÁLIDA) ---")
-    # run_filtered_scrape(
-    #     target_categories_normalized=["categoria_inexistente", "producao"],
-    #     start_year_filter=2021,
-    #     end_year_filter=2021,
-    #     output_filepath=os.path.join(cache_dir, "vitibrasil_filtered_invalid_cat_test.json")
-    # )
-    logger.info("--- TESTE DE RASPAGEM FILTRADA (CATEGORIA INVÁLIDA) CONCLUÍDO ---")
-
-    # Teste de normalização
-    # print(f"Normalizado 'Produção': {normalize_text('Produção')}")
-    # print(f"Normalizado 'Comercialização': {normalize_text('Comercialização')}")
-    # print(f"Normalizado 'Processamento - Vinhos de Mesa': {normalize_text('Processamento - Vinhos de Mesa')}")
-
-    # Teste de get_page_metadata para verificar nomes de abas e sub-opções
-    # logger.info("\n--- TESTE get_page_metadata ---")
-    # for opt_c in ALL_KNOWN_OPTIONS:
-    #     m_year, max_y, s_opts, main_n = get_page_metadata(opt_c, 2022)
-    #     logger.info(f"Opt: {opt_c} -> Nome Aba Norm: '{main_n}', Anos: [{m_year}-{max_y}], Sub-Opções: {s_opts}")
-
-    from datetime import datetime # Import datetime for the main block
-    logger.info(f"Script de raspagem finalizado em {datetime.now()}")
+    # Exemplo de execução sem salvar arquivo JSON (comportamento padrão para o serviço):
+    # print("Executando raspagem de teste (sem salvar em arquivo JSON por padrão)...")
+    # scraped_results = run_full_scrape()
+    if not scraped_results:
+        logger.info("Nenhum dado foi coletado durante a execução de teste.")

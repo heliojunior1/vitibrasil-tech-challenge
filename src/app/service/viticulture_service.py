@@ -32,7 +32,7 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
         logger.info("Tentando raspar dados ao vivo da Embrapa...")
         scraped_data_list = run_full_scrape(output_filepath=None)
 
-        if  scraped_data_list and any(item.get('dados') for item in scraped_data_list):
+        if scraped_data_list and any(item.get('dados') for item in scraped_data_list):
             logger.info(f"Raspagem ao vivo bem-sucedida. {len(scraped_data_list)} seções de dados obtidas.")
             
             viticultura_create_list: List[ViticulturaCreate] = []
