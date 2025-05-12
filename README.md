@@ -138,9 +138,25 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
 
 ## Deploy
 
+
 Este projeto inclui um arquivo [`render.yaml`](render.yaml) para facilitar o deploy na plataforma [Render](https://render.com/).
 
+
 A criacao é feito no render. Precisar adicionar as variaveis JWT_SECRET e DATABASE_URL 
+
+
+**Nota para Desenvolvimento Local:**
+
+Se você clonar este projeto para desenvolvimento local, precisará criar um arquivo chamado `.env` na raiz do projeto. Este arquivo não é versionado no Git (e está incluído no `.gitignore`) por razões de segurança e para permitir configurações específicas do ambiente.
+
+O arquivo `.env` deve conter as seguintes variáveis (ajuste os valores conforme necessário para o seu ambiente local):
+
+```env
+DATABASE_URL="sqlite:///./viticultura.db"
+JWT_SECRET="coloque_aqui_um_segredo_jwt_bem_forte_para_desenvolvimento"
+```
+
+Sem este arquivo `.env` configurado corretamente, a aplicação pode não iniciar localmente devido à ausência das variáveis de ambiente `DATABASE_URL` e `JWT_SECRET` que são esperadas pelo arquivo `src/app/config/settings.py`.
 
 ## Realizar testes
 python -m pytest
