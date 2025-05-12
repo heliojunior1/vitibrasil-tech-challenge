@@ -140,6 +140,11 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
 
 Este projeto inclui um arquivo [`render.yaml`](render.yaml) para facilitar o deploy na plataforma [Render](https://render.com/).
 
+## Realizar testes
+python -m pytest
+
+
+
 ## Licença
 
 Este projeto está licenciado sob a Licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
