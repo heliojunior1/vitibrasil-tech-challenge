@@ -288,7 +288,7 @@ def run_full_scrape(output_filepath: str = None) -> list:
         #Caso queira usar um ano fixo para teste, descomente a linha abaixo:
         #current_min_year = 2023 
 
-        current_min_year = 2023
+        current_min_year = min_year_meta if min_year_meta is not None else FALLBACK_MIN_YEAR 
         current_max_year = max_year_meta if max_year_meta is not None else FALLBACK_MAX_YEAR
         
         logger.info(f"Scraping {opt_code} ({main_opt_display_name}) for years: {current_min_year} to {current_max_year}")
