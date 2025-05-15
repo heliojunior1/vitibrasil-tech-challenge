@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any # Ensure Dict and Any are imported
 from datetime import datetime # Adicionar datetime
 
@@ -34,3 +34,21 @@ class ViticulturaListResponse(BaseModel):
     fonte: str = Field(..., description="Fonte dos dados (e.g., 'Embrapa (Raspagem Ao Vivo)', 'Cache (BD)')")
     dados: List[ViticulturaResponse] = Field(..., description="Lista de entradas de dados de viticultura")
     message: Optional[str] = Field(None, description="Mensagem adicional")
+
+class DadosEspecificosRequest(BaseModel):
+    ano_min: int = Field(..., ge=1970, le=2023, description="Ano mínimo (1970-2023)")
+    ano_max: int = Field(..., ge=1970, le=2023, description="Ano máximo (1970-2023)")
+    opcao: str = Field(..., description="Opção: 'producao', 'processamento', 'comercializacao', 'importacao', 'exportacao'")
+
+    @validator('opcao')
+    def validate_opcao(cls, v):
+        opcoes_validas = ['producao', 'processamento', 'comercializacao', 'importacao', 'exportacao']
+        if v not in opcoes_validas:
+            raise ValueError(f"Opção deve ser uma das seguintes: {opcoes_validas}")
+        return v
+
+    @validator('ano_max')
+    def validate_anos(cls, v, values):
+        if 'ano_min' in values and v < values['ano_min']:
+            raise ValueError("ano_max deve ser maior ou igual a ano_min")
+        return v

@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timezone # timezone não está sendo usado, mas pode ser útil
+from datetime import datetime
 from src.app.web.main import app
 from src.app.auth.dependencies import get_current_user
 from src.app.models.viticulture import Viticultura as ViticulturaModel
@@ -13,7 +13,8 @@ from src.app.domain.viticulture import ViticulturaCreate
 PATH_RUN_FULL_SCRAPE = "src.app.service.viticulture_service.run_full_scrape"
 PATH_GET_LATEST_SCRAPE_GROUP = "src.app.service.viticulture_service.get_latest_scrape_group"
 PATH_BACKGROUND_TASKS_ADD_TASK = "fastapi.BackgroundTasks.add_task"
-
+PATH_RUN_SCRAPE_BY_PARAMS = "src.app.service.viticulture_service.run_scrape_by_params"
+PATH_GET_SPECIFIC_DATA_FROM_DB = "src.app.service.viticulture_service.get_specific_data_from_db"
 
 MOCK_USER_PAYLOAD = {"sub": "testuser", "username": "testuser"}
 MOCK_CACHE_TIMESTAMP = datetime.utcnow()
@@ -31,7 +32,7 @@ MOCK_CACHE_DATA_FROM_DB = [
         id=2,
         ano=2023,
         aba="Comercialização Teste",
-        subopcao=None, # Test with None subopcao
+        subopcao=None,
         dados_list_json=[{"produto": "Suco de Uva Teste", "valor": 500.50, "unidade_valor": "US$"}],
         data_raspagem=MOCK_CACHE_TIMESTAMP
     )
@@ -39,10 +40,6 @@ MOCK_CACHE_DATA_FROM_DB = [
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_test_database_for_data_api():
-    """
-    Fixture para criar tabelas antes de cada teste de integração de dados
-    e limpá-las depois, especialmente para testes que interagem com o BD real.
-    """
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
@@ -51,10 +48,6 @@ def mock_get_current_user_override():
     return MOCK_USER_PAYLOAD
 
 def test_get_data_live_scrape_success_triggers_background_save(client: TestClient):
-    """
-    Testa o endpoint /api/viticultura/dados quando a raspagem ao vivo é bem-sucedida.
-    Verifica a resposta da API e se a tarefa de background para salvar é chamada.
-    """
     app.dependency_overrides[get_current_user] = mock_get_current_user_override
     
     current_time_scrape = datetime.utcnow()
@@ -63,7 +56,6 @@ def test_get_data_live_scrape_success_triggers_background_save(client: TestClien
         {"ano": 2024, "aba": "Exportação Ao Vivo", "subopcao": None, "dados": [{"pais": "EUA", "valor": 10000}]}
     ]
 
-    # Mock para datetime.utcnow dentro do service para controlar o data_raspagem
     with patch("src.app.service.viticulture_service.datetime") as mock_datetime_service, \
          patch(PATH_RUN_FULL_SCRAPE) as mock_run_scrape, \
          patch(PATH_BACKGROUND_TASKS_ADD_TASK) as mock_add_task:
@@ -106,12 +98,6 @@ def test_get_data_live_scrape_success_triggers_background_save(client: TestClien
     del app.dependency_overrides[get_current_user]
 
 def test_get_data_from_cache_when_scrape_fails(client: TestClient):
-    """
-    Tests the /api/viticultura/dados endpoint.
-    Simulates a scenario where:
-    1. Live scraping (run_full_scrape) fails (returns an empty list).
-    2. Data is successfully retrieved from the database cache (get_latest_scrape_group).
-    """
     app.dependency_overrides[get_current_user] = mock_get_current_user_override
 
     with patch(PATH_RUN_FULL_SCRAPE) as mock_scrape, \
@@ -147,33 +133,23 @@ def test_get_data_from_cache_when_scrape_fails(client: TestClient):
     del app.dependency_overrides[get_current_user]
 
 def test_get_data_fails_when_scrape_and_cache_fail(client: TestClient):
-        """
-        Tests the /viticultura/dados endpoint.
-        Simulates a scenario where:
-        1. Live scraping (run_full_scrape) fails (returns an empty list).
-        2. Database cache also fails or is empty (get_latest_scrape_group returns empty list).
-        """
-        app.dependency_overrides[get_current_user] = mock_get_current_user_override
+    app.dependency_overrides[get_current_user] = mock_get_current_user_override
 
-        with patch(PATH_RUN_FULL_SCRAPE) as mock_scrape, \
-             patch(PATH_GET_LATEST_SCRAPE_GROUP) as mock_get_cache:
+    with patch(PATH_RUN_FULL_SCRAPE) as mock_scrape, \
+         patch(PATH_GET_LATEST_SCRAPE_GROUP) as mock_get_cache:
 
-            mock_scrape.return_value = []
-            mock_get_cache.return_value = []
+        mock_scrape.return_value = []
+        mock_get_cache.return_value = []
 
-            response = client.get("/api/viticultura/dados")
+        response = client.get("/api/viticultura/dados")
 
-            assert response.status_code == 503
-            response_data = response.json()
-            assert "Raspagem ao vivo não retornou dados. Usando cache do BD se disponível. Cache do BD também está vazio." in response_data["detail"]
+        assert response.status_code == 503
+        response_data = response.json()
+        assert "Raspagem ao vivo não retornou dados. Usando cache do BD se disponível. Cache do BD também está vazio." in response_data["detail"]
 
-        del app.dependency_overrides[get_current_user]
+    del app.dependency_overrides[get_current_user]
 
 def test_get_data_from_real_db_when_scrape_fails(client: TestClient):
-    """
-    Testa o endpoint /api/viticultura/dados quando a raspagem falha,
-    verificando se os dados são lidos do banco de dados SQLite real.
-    """
     app.dependency_overrides[get_current_user] = mock_get_current_user_override
 
     db_session_for_setup = SessionLocal()
@@ -195,7 +171,7 @@ def test_get_data_from_real_db_when_scrape_fails(client: TestClient):
             data_raspagem=test_timestamp
         )
     ]
-    inserted_ids = [] # Inicializar para o bloco finally
+    inserted_ids = []
 
     try:
         db_session_for_setup.add_all(real_db_data_to_insert)
@@ -240,3 +216,104 @@ def test_get_data_from_real_db_when_scrape_fails(client: TestClient):
 
         if get_current_user in app.dependency_overrides:
             del app.dependency_overrides[get_current_user]
+
+# ------------------- NOVOS TESTES PARA /dados-especificos -------------------
+
+def test_post_dados_especificos_success(client: TestClient):
+    """
+    Testa o endpoint /api/viticultura/dados-especificos para um intervalo de anos e opção.
+    """
+    app.dependency_overrides[get_current_user] = mock_get_current_user_override
+
+    mock_scraped_data = [
+        {"ano": 2022, "aba": "producao", "subopcao": "vinhos_de_mesa", "dados": [{"produto": "Vinho Tinto", "quantidade": 1000, "unidade_quantidade": "L"}]},
+        {"ano": 2023, "aba": "producao", "subopcao": "vinhos_de_mesa", "dados": [{"produto": "Vinho Branco", "quantidade": 800, "unidade_quantidade": "L"}]}
+    ]
+
+    with patch(PATH_RUN_SCRAPE_BY_PARAMS) as mock_scrape_by_params, \
+         patch(PATH_BACKGROUND_TASKS_ADD_TASK) as mock_add_task:
+        mock_scrape_by_params.return_value = mock_scraped_data
+
+        request_payload = {
+            "ano_min": 2022,
+            "ano_max": 2023,
+            "opcao": "producao"
+        }
+        response = client.post(
+            "/api/viticultura/dados-especificos",
+            json=request_payload,
+            headers={"Authorization": "Bearer fake_token"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "fonte" in data
+        assert "dados" in data
+        assert isinstance(data["dados"], list)
+        assert data["fonte"].startswith("Embrapa")
+        assert "Salvamento no banco de dados iniciado em background" in data["message"]
+        assert len(data["dados"]) == 2
+        for item in data["dados"]:
+            assert "ano" in item
+            assert "aba" in item
+            assert "dados" in item
+            assert "data_raspagem" in item
+
+    del app.dependency_overrides[get_current_user]
+
+def test_post_dados_especificos_cache(client: TestClient):
+    """
+    Testa o endpoint /api/viticultura/dados-especificos quando a raspagem falha e retorna dados do cache.
+    """
+    app.dependency_overrides[get_current_user] = mock_get_current_user_override
+
+    with patch(PATH_RUN_SCRAPE_BY_PARAMS) as mock_scrape_by_params, \
+         patch(PATH_GET_SPECIFIC_DATA_FROM_DB) as mock_get_cache:
+        mock_scrape_by_params.return_value = []
+        mock_get_cache.return_value = MOCK_CACHE_DATA_FROM_DB
+
+        request_payload = {
+            "ano_min": 2022,
+            "ano_max": 2023,
+            "opcao": "producao"
+        }
+        response = client.post(
+            "/api/viticultura/dados-especificos",
+            json=request_payload,
+            headers={"Authorization": "Bearer fake_token"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "fonte" in data
+        assert "dados" in data
+        assert isinstance(data["dados"], list)
+        assert data["fonte"].startswith("Cache")
+        assert "cache do banco de dados" in data["message"] or "cache do BD" in data["message"]
+
+    del app.dependency_overrides[get_current_user]
+
+def test_post_dados_especificos_fail(client: TestClient):
+    """
+    Testa o endpoint /api/viticultura/dados-especificos quando não há dados nem na raspagem nem no cache.
+    """
+    app.dependency_overrides[get_current_user] = mock_get_current_user_override
+
+    with patch(PATH_RUN_SCRAPE_BY_PARAMS) as mock_scrape_by_params, \
+         patch(PATH_GET_SPECIFIC_DATA_FROM_DB) as mock_get_cache:
+        mock_scrape_by_params.return_value = []
+        mock_get_cache.return_value = []
+
+        request_payload = {
+            "ano_min": 2022,
+            "ano_max": 2023,
+            "opcao": "producao"
+        }
+        response = client.post(
+            "/api/viticultura/dados-especificos",
+            json=request_payload,
+            headers={"Authorization": "Bearer fake_token"}
+        )
+        assert response.status_code in (500, 503)
+        data = response.json()
+        assert "detail" in data
+
+    del app.dependency_overrides[get_current_user]

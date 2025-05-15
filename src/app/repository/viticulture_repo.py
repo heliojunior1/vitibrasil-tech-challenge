@@ -53,3 +53,15 @@ def get_latest_scrape_group(db: Session) -> List[ViticulturaModel]:
     except Exception as e:
         logger.error(f"Erro ao buscar o grupo de raspagem mais recente: {e}")
         raise 
+
+def get_specific_data_from_db(db: Session, ano_min: int, ano_max: int, opcao: str):
+    try:
+        query = db.query(ViticulturaModel).filter(
+            ViticulturaModel.ano >= ano_min,
+            ViticulturaModel.ano <= ano_max,
+            ViticulturaModel.aba.ilike(f"%{opcao}%")
+        ).order_by(ViticulturaModel.data_raspagem.desc())
+        return query.all()
+    except Exception as e:
+        logger.error(f"Erro ao buscar dados específicos do banco: {e}")
+        return []    

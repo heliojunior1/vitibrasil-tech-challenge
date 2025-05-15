@@ -136,6 +136,42 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
     *   O salvamento no banco de dados ocorre em background.
     *   Header de Autorização: `Bearer <seu_token_jwt>`
 
+
+
+*   **`POST /api/viticultura/dados-especificos`**: (Requer Autenticação) Obtém dados de viticultura para um intervalo de anos e uma opção (aba).
+    *   Permite ao usuário especificar o intervalo de anos e a aba desejada.
+    *   Tenta raspagem ao vivo da Embrapa; se falhar, retorna dados do cache do banco de dados.
+    *   O salvamento dos dados raspados ocorre em background.
+    *   Header de Autorização: `Bearer <seu_token_jwt>`
+    *   Corpo da requisição (JSON):
+        ```json
+        {
+          "ano_min": 2022,
+          "ano_max": 2023,
+          "opcao": "producao"
+        }
+        ```
+    *   Resposta (exemplo):
+        ```json
+        {
+          "fonte": "Embrapa (Raspagem Específica - Salvamento em Andamento)",
+          "dados": [
+            {
+              "id": null,
+              "ano": 2022,
+              "aba": "producao",
+              "subopcao": "vinhos_de_mesa",
+              "dados": [
+                {"produto": "Vinho Tinto", "quantidade": 1000, "unidade_quantidade": "L"}
+              ],
+              "data_raspagem": "2024-05-15T12:34:56.789Z"
+            }
+          ],
+          "message": "Dados de raspagem (2022-2023, producao) retornados. Salvamento no banco de dados iniciado em background."
+        }
+        ```
+
+
 ## Deploy
 
 

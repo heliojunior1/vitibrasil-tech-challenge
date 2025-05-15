@@ -7,6 +7,10 @@ from src.app.domain.viticulture import ViticulturaCreate, ViticulturaResponse, V
 from src.app.config.database import SessionLocal 
 import logging
 from datetime import datetime # Adicionar datetime
+from src.app.domain.viticulture import DadosEspecificosRequest
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,3 +133,76 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
         dados=data_for_response, 
         message=mensagem_adicional
     )
+
+
+def buscar_dados_especificos(db: Session, background_tasks: BackgroundTasks, ano_min: int, ano_max: int, opcao: str):
+    from src.app.scraper.viticulture_scraper import run_scrape_by_params
+    from src.app.repository.viticulture_repo import get_specific_data_from_db
+    fonte_mensagem = "Falha ao obter dados"
+    data_for_response: List[ViticulturaResponse] = []
+    mensagem_adicional = None
+    current_timestamp = datetime.utcnow()
+
+    try:
+        scraped_data_list = run_scrape_by_params(ano_min, ano_max, opcao)
+        if scraped_data_list and any(item.get('dados') for item in scraped_data_list):
+            viticultura_create_list: List[ViticulturaCreate] = []
+            for item_dict in scraped_data_list:
+                try:
+                    vc = ViticulturaCreate(
+                        ano=item_dict['ano'],
+                        aba=item_dict['aba'],
+                        subopcao=item_dict.get('subopcao'),
+                        dados=item_dict['dados'],
+                        data_raspagem=current_timestamp
+                    )
+                    viticultura_create_list.append(vc)
+                except Exception as e:
+                    logger.error(f"Erro ao processar item raspado: {e}")
+                    continue
+            for vc_item in viticultura_create_list:
+                data_for_response.append(ViticulturaResponse(
+                    id=None,
+                    ano=vc_item.ano,
+                    aba=vc_item.aba,
+                    subopcao=vc_item.subopcao,
+                    dados=vc_item.dados,
+                    data_raspagem=vc_item.data_raspagem
+                ))
+            fonte_mensagem = "Embrapa (Raspagem Específica - Salvamento em Andamento)"
+            background_tasks.add_task(_save_data_in_background, viticultura_create_list)
+            return ViticulturaListResponse(
+                fonte=fonte_mensagem,
+                dados=data_for_response,
+                message=f"Dados de raspagem ({ano_min}-{ano_max}, {opcao}) retornados. Salvamento no banco de dados iniciado em background."
+            )
+        else:
+            mensagem_adicional = "Raspagem ao vivo não retornou dados. Usando cache do BD se disponível."
+    except Exception as e:
+        logger.error(f"Erro na raspagem ao vivo: {e}. Tentando cache do BD.")
+        mensagem_adicional = "Erro na raspagem ao vivo. Usando cache do BD se disponível."
+
+    db_data = get_specific_data_from_db(db, ano_min, ano_max, opcao)
+    if db_data:
+        for db_item in db_data:
+            data_for_response.append(ViticulturaResponse(
+                id=db_item.id,
+                ano=db_item.ano,
+                aba=db_item.aba,
+                subopcao=db_item.subopcao,
+                dados=db_item.dados_list_json,
+                data_raspagem=db_item.data_raspagem
+            ))
+        fonte_mensagem = f"Cache (Banco de Dados - {opcao}, {ano_min}-{ano_max})"
+        return ViticulturaListResponse(
+            fonte=fonte_mensagem,
+            dados=data_for_response,
+            message=mensagem_adicional or "Dados servidos do cache do banco de dados."
+        )
+    else:
+        fonte_mensagem = "Falha - Cache do BD Vazio"
+        return ViticulturaListResponse(
+            fonte=fonte_mensagem,
+            dados=[],
+            message=mensagem_adicional or "Nenhum dado encontrado na Embrapa nem no cache do BD."
+        )
