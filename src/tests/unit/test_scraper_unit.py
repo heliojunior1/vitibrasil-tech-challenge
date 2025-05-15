@@ -1,5 +1,5 @@
 import pytest
-from src.app.scraper.viticulture_scraper import normalize_text
+from app.scraper.viticulture_full_scraper import normalize_text
 
 def test_normalize_text_simple():
     assert normalize_text("Vinhos Finos de Mesa") == "vinhos_finos_de_mesa"

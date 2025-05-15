@@ -27,7 +27,6 @@ def get_page_soup(url, description="page"):
     max_retries = 3
     for attempt in range(1, max_retries + 1):
         try:
-            # print(f"Fetching {description} from {url} (Attempt {attempt}/{max_retries})")
             resp = requests.get(url, timeout=(30, 60))
             resp.raise_for_status()
             return BeautifulSoup(resp.content, 'lxml')
@@ -178,7 +177,7 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         rows_for_col_count = body_for_col_count.find_all('tr') if body_for_col_count else tabela_bs.find_all('tr')[start_index_for_rows:]
         if rows_for_col_count:
             first_data_row_cols_elements = rows_for_col_count[0].find_all('td')
-            if first_data_row_cols_elements : first_data_row_cols = len(first_data_row_cols_elements)
+            if first_data_row_cols_elements: first_data_row_cols = len(first_data_row_cols_elements)
         
         if first_data_row_cols > 0:
             header_keys = [f"coluna_{i+1}" for i in range(first_data_row_cols)]
@@ -249,9 +248,14 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
                     parts = original_key.split("__", 1)
                     base_name = parts[0] 
                     unit = parts[1]      
-                    
                     current_row_data[base_name] = cleaned_value 
                     current_row_data[f"unidade_{base_name}"] = unit 
+                elif re.match(r"^(.*)_(kg|l|us|ml|hl|ton|g|m3)$", original_key):
+                    match = re.match(r"^(.*)_(kg|l|us|ml|hl|ton|g|m3)$", original_key)
+                    base_name = match.group(1)
+                    unit = match.group(2)
+                    current_row_data[base_name] = cleaned_value
+                    current_row_data[f"unidade_{base_name}"] = unit
                 else:
                     current_row_data[original_key] = cleaned_value
         
@@ -273,126 +277,3 @@ def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = Non
         "subopcao": final_subopcao_name,
         "dados": dados_coletados
     }
-
-def run_full_scrape(output_filepath: str = None) -> list:
-    MAIN_OPTIONS_TO_SCRAPE = ["opt_02", "opt_03", "opt_04", "opt_05", "opt_06"]
-    all_scraped_data = []
-    DEFAULT_YEAR_FOR_METADATA_DISCOVERY = 2023
-    FALLBACK_MIN_YEAR = 2023
-    FALLBACK_MAX_YEAR = 2023
-
-    for opt_code in MAIN_OPTIONS_TO_SCRAPE:
-        logger.info(f"\n>>> Processing Main Option Code: {opt_code} <<<")
-        min_year_meta, max_year_meta, sub_options_list, main_opt_display_name = get_page_metadata(opt_code, DEFAULT_YEAR_FOR_METADATA_DISCOVERY)
-        logger.info(f"Descriptive name for {opt_code}: {main_opt_display_name}")
-        #Caso queira usar um ano fixo para teste, descomente a linha abaixo:
-        #current_min_year = 2023 
-
-        current_min_year = min_year_meta if min_year_meta is not None else FALLBACK_MIN_YEAR 
-        current_max_year = max_year_meta if max_year_meta is not None else FALLBACK_MAX_YEAR
-        
-        logger.info(f"Scraping {opt_code} ({main_opt_display_name}) for years: {current_min_year} to {current_max_year}")
-        if sub_options_list:
-            logger.info(f"Found suboptions: {[(s['code'], s['name']) for s in sub_options_list]}")
-        else:
-            logger.info(f"No suboptions found for {opt_code} ({main_opt_display_name}).")
-
-        for year_to_scrape in range(current_min_year, current_max_year + 1):
-            if not sub_options_list:
-                logger.info(f"\n--- Scraping: {opt_code} ({main_opt_display_name}) | Ano: {year_to_scrape} ---")
-                time.sleep(0.5)
-                scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, None,
-                                                          json_aba_name=main_opt_display_name,
-                                                          json_subopcao_name=None)
-                if scraped_data_item and scraped_data_item.get("dados"):
-                    all_scraped_data.append(scraped_data_item)
-                elif scraped_data_item:
-                    logger.info(f"No data rows found for {opt_code} ({main_opt_display_name}) for year {year_to_scrape}")
-            else:
-                for sub_opt_detail in sub_options_list:
-                    logger.info(f"\n--- Scraping: {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) | Ano: {year_to_scrape} ---")
-                    time.sleep(0.5)
-                    scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, sub_opt_detail['code'],
-                                                              json_aba_name=main_opt_display_name,
-                                                              json_subopcao_name=sub_opt_detail['name'])
-                    if scraped_data_item and scraped_data_item.get("dados"):
-                        all_scraped_data.append(scraped_data_item)
-                    elif scraped_data_item:
-                        logger.info(f"No data rows for {opt_code}/{sub_opt_detail['code']} ({main_opt_display_name}/{sub_opt_detail['name']}) for year {year_to_scrape}")
-
-    total_entries = len(all_scraped_data)
-    total_individual_records = sum(len(item.get('dados', [])) for item in all_scraped_data)
-
-    logger.info(f"\n\nProcessamento Concluído.")
-    logger.info(f"Total de combinações (ano/aba/subopção) com dados: {total_entries}")
-    logger.info(f"Total de registros individuais de dados (linhas de tabela): {total_individual_records}")
-
-    if all_scraped_data and output_filepath: # Salva o JSON apenas se output_filepath for fornecido
-        try:
-            output_dir = os.path.dirname(output_filepath)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
-
-            with open(output_filepath, 'w', encoding='utf-8') as f:
-                json.dump(all_scraped_data, f, ensure_ascii=False, indent=2)
-            logger.info(f"Dados raspados também salvos em: {output_filepath}")
-        except Exception as e:
-            logger.error(f"Erro ao salvar arquivo JSON de cache em {output_filepath}: {e}")
-    elif not all_scraped_data and output_filepath: # Informa se output_filepath foi dado mas não há dados
-        logger.warning("Nenhum dado foi coletado para salvar no arquivo JSON.")
-
-    return all_scraped_data
-
-def run_scrape_by_params(ano_min: int, ano_max: int, opcao_nome: str) -> list:
-    OPCOES = {
-        "producao": "opt_02",
-        "processamento": "opt_03",
-        "comercializacao": "opt_04",
-        "importacao": "opt_05",
-        "exportacao": "opt_06"
-    }
-    if opcao_nome not in OPCOES:
-        logger.error(f"Opção '{opcao_nome}' inválida. Opções disponíveis: {list(OPCOES.keys())}")
-        return []
-    if ano_min < 1970 or ano_min > 2023 or ano_max < 1970 or ano_max > 2023:
-        logger.error("Anos devem estar entre 1970 e 2023")
-        return []
-    if ano_min > ano_max:
-        logger.error("Ano mínimo deve ser menor ou igual ao ano máximo")
-        return []
-
-    opt_code = OPCOES[opcao_nome]
-    all_scraped_data = []
-    min_year_meta, max_year_meta, sub_options_list, main_opt_display_name = get_page_metadata(opt_code, ano_max)
-    for year_to_scrape in range(ano_min, ano_max + 1):
-        if not sub_options_list:
-            scraped_data_item = get_data_from_embrapa(year_to_scrape, opt_code, None, json_aba_name=main_opt_display_name)
-            if scraped_data_item and scraped_data_item.get("dados"):
-                all_scraped_data.append(scraped_data_item)
-        else:
-            for sub_opt_detail in sub_options_list:
-                scraped_data_item = get_data_from_embrapa(
-                    year_to_scrape, opt_code, sub_opt_detail['code'],
-                    json_aba_name=main_opt_display_name,
-                    json_subopcao_name=sub_opt_detail['name']
-                )
-                if scraped_data_item and scraped_data_item.get("dados"):
-                    all_scraped_data.append(scraped_data_item)
-    return all_scraped_data
-
-if __name__ == '__main__':
-    # Este bloco é para execução direta do script, útil para testes.
-    # O serviço chamará run_full_scrape(output_filepath=None)
-    
-    # Exemplo de como salvar um arquivo JSON ao executar diretamente:
-    actual_min_year_scraped = 2023 
-    actual_max_year_scraped = 2023
-    file_out_name = f"dados_embrapa_vitibrasil_{actual_min_year_scraped}_a_{actual_max_year_scraped}_descritivo_TEST.json"
-    logger.info(f"Executando raspagem de teste, saída para: {file_out_name}")
-    scraped_results = run_full_scrape(output_filepath=file_out_name)
-    
-    # Exemplo de execução sem salvar arquivo JSON (comportamento padrão para o serviço):
-    # print("Executando raspagem de teste (sem salvar em arquivo JSON por padrão)...")
-    # scraped_results = run_full_scrape()
-    if not scraped_results:
-        logger.info("Nenhum dado foi coletado durante a execução de teste.")

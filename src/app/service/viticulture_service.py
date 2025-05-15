@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from fastapi import BackgroundTasks 
-from src.app.scraper.viticulture_scraper import run_full_scrape
+from src.app.scraper.viticulture_full_scraper import run_full_scrape
+from src.app.scraper.viticulture_partial_scraper import run_scrape_by_params
 from src.app.repository.viticulture_repo import save_bulk, get_latest_scrape_group # Alterado aqui
 from src.app.domain.viticulture import ViticulturaCreate, ViticulturaResponse, ViticulturaListResponse
 from src.app.config.database import SessionLocal 
@@ -136,8 +137,9 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
 
 
 def buscar_dados_especificos(db: Session, background_tasks: BackgroundTasks, ano_min: int, ano_max: int, opcao: str):
-    from src.app.scraper.viticulture_scraper import run_scrape_by_params
+    from src.app.scraper.viticulture_partial_scraper import run_scrape_by_params
     from src.app.repository.viticulture_repo import get_specific_data_from_db
+
     fonte_mensagem = "Falha ao obter dados"
     data_for_response: List[ViticulturaResponse] = []
     mensagem_adicional = None
