@@ -1,23 +1,23 @@
 fastapi==0.115.6
 urllib3==2.3.0
-sqlalchemy
-pydantic-settings
-python-dotenv
-pandas 
-requests
+sqlalchemy==2.0.41
+pydantic-settings==2.9.1
+python-dotenv==1.1.0
+pandas==2.2.3
+requests==2.32.3
 uvicorn==0.34.0
 websocket-client==1.8.0
 wsproto==1.2.0
 
 # Para testes
-pytest
-pytest-asyncio
-httpx
+pytest==8.3.5
+pytest-asyncio==0.26.0
+httpx==0.28.1
 
-python-jose
-passlib[bcrypt]
-python-multipart
+python-jose==3.4.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
 bcrypt==4.0.1
-beautifulsoup4  
-lxml
-gunicorn 
+beautifulsoup4==4.13.4
+lxml==5.4.0
+gunicorn==23.0.0
