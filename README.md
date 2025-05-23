@@ -60,7 +60,7 @@ vitibrasil-tech-challenge/
 
 1.  **Clone o repositório:**
     ```bash
-    git clone https://github.com/seu-usuario/vitibrasil-tech-challenge.git
+    git clone https://github.com/heliojunior1/vitibrasil-tech-challenge.git
     cd vitibrasil-tech-challenge
     ```
 
