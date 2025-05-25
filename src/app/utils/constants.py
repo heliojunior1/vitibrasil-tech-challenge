@@ -1,0 +1,1 @@
+BASE_URL_VITIBRASIL="http://vitibrasil.cnpuv.embrapa.br/index.php?"

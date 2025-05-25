@@ -7,6 +7,7 @@ import unicodedata
 import re
 import os
 import logging
+from src.app.utils.constants import BASE_URL_VITIBRASIL
 logger = logging.getLogger(__name__) 
 
 CACHED_DATA_FILENAME = "vitibrasil_data_cache.json"
@@ -43,7 +44,7 @@ def get_page_metadata(option_code, reference_year=2023):
     Returns (min_year, max_year, list_of_suboption_details, main_option_display_name).
     Each suboption_detail is a dict: {'code': 'subopt_XX', 'name': 'Normalized Display Name'}
     """
-    base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php?"
+    base_url = BASE_URL_VITIBRASIL
     meta_url_params = {'ano': reference_year, 'opcao': option_code}
     soup = get_page_soup(base_url + urlencode(meta_url_params), description=f"metadata for {option_code}")
 
@@ -118,7 +119,11 @@ def get_page_metadata(option_code, reference_year=2023):
 def get_data_from_embrapa(year: int, option_code: str, suboption_code: str = None,
                           json_aba_name: str = None,
                           json_subopcao_name: str = None):
-    base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php?"
+    """
+    Fetches data from the Embrapa website for a given year, option code (tab), and suboption code (subtab).
+    Returns a dictionary with the year, option code (tab), suboption code (subtab), and the scraped data.
+    """
+    base_url = BASE_URL_VITIBRASIL
     params = {'ano': year, 'opcao': option_code}
     if suboption_code:
         params['subopcao'] = suboption_code

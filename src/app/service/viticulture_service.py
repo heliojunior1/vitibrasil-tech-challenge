@@ -31,7 +31,7 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
     fonte_mensagem = "Falha ao obter dados"
     data_for_response: List[ViticulturaResponse] = []
     mensagem_adicional = None
-    current_timestamp = datetime.utcnow() # Timestamp para esta tentativa de raspagem
+    current_timestamp = datetime.now(datetime.timezone.utc) # Timestamp para esta tentativa de raspagem
 
     try:
         logger.info("Tentando raspar dados ao vivo da Embrapa...")
