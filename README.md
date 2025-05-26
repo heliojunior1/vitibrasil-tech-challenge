@@ -28,20 +28,21 @@ Projeto de API para coleta e consulta de dados de vitivinicultura da Embrapa. De
 vitibrasil-tech-challenge/
 ├── src/
 │   ├── app/
-│   │   ├── auth/         # Lógica de autenticação e JWT
-│   │   ├── config/       # Configurações de banco de dados e app
-│   │   ├── domain/       # Modelos Pydantic para validação e serialização
-│   │   ├── models/       # Modelos SQLAlchemy para o ORM
-│   │   ├── repository/   # Camada de acesso aos dados (operações de BD)
-│   │   ├── scraper/      # Lógica de raspagem de dados
-│   │   ├── service/      # Lógica de negócios
-│   │   ├── utils/        # Utilitários (ex: hash de senha)
-│   │   └── web/          # Definição da aplicação FastAPI e rotas
-│   │       ├── main.py   # Ponto de entrada da aplicação FastAPI
-│   │       ├── routes.py # Rotas principais da API
-│   │       └── routes_auth.py # Rotas de autenticação
-│   ├── tests/            # Testes unitários e de integração (a serem desenvolvidos)
-├── .env.example          # Arquivo de exemplo para variáveis de ambiente
+│   │   ├── auth/                   # Lógica de autenticação e JWT
+│   │   ├── config/                 # Configurações de banco de dados e app
+│   │   ├── domain/                 # Modelos Pydantic para validação e serialização
+│   │   ├── models/                 # Modelos SQLAlchemy para o ORM
+│   │   ├── repository/             # Camada de acesso aos dados (operações de BD)
+│   │   ├── scraper/                # Lógica de raspagem de dados
+│   │   ├── service/                # Lógica de negócios
+│   │   ├── utils/                  # Utilitários (ex: hash de senha)
+│   │   └── web/                    # Definição da aplicação FastAPI e rotas
+│   │       ├── main.py             # Ponto de entrada da aplicação FastAPI
+│   │       ├── routes.py           # Rotas principais da API
+│   │       └── routes_auth.py      # Rotas de autenticação
+│   ├── tests/                      # Testes unitários e de integração (a serem desenvolvidos)
+│   ├── architecture-diagram.drawio # Diagrama de arquitetura ("Draw.io Integration" - Extensão do VS Code)
+├── .env.example                    # Arquivo de exemplo para variáveis de ambiente
 ├── .gitignore
 ├── LICENSE
 ├── README.md
