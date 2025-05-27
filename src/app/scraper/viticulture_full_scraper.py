@@ -10,7 +10,7 @@ def run_full_scrape(output_filepath: str = None) -> list:
     MAIN_OPTIONS_TO_SCRAPE = ["opt_02", "opt_03", "opt_04", "opt_05", "opt_06"]
     all_scraped_data = []
     DEFAULT_YEAR_FOR_METADATA_DISCOVERY = 2023
-    FALLBACK_MIN_YEAR = 2023
+    FALLBACK_MIN_YEAR = 1970
     FALLBACK_MAX_YEAR = 2023
 
     for opt_code in MAIN_OPTIONS_TO_SCRAPE:
