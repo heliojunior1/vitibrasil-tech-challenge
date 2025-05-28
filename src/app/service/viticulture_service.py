@@ -1,14 +1,15 @@
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from fastapi import BackgroundTasks 
-from src.app.scraper.viticulture_full_scraper import run_full_scrape
-from src.app.scraper.viticulture_partial_scraper import run_scrape_by_params
+from src.app.scraper.full_scraper import run_full_scrape
+from src.app.scraper.partial_scraper import run_scrape_by_params
 from src.app.repository.viticulture_repo import save_bulk, get_latest_scrape_group # Alterado aqui
 from src.app.domain.viticulture import ViticulturaCreate, ViticulturaResponse, ViticulturaListResponse
 from src.app.config.database import SessionLocal 
 import logging
-from datetime import datetime # Adicionar datetime
+from datetime import datetime, timezone  # Add timezone import here
 from src.app.domain.viticulture import DadosEspecificosRequest
+from src.app.repository.viticulture_repo import get_specific_data_from_db
 
 
 
@@ -31,7 +32,7 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
     fonte_mensagem = "Falha ao obter dados"
     data_for_response: List[ViticulturaResponse] = []
     mensagem_adicional = None
-    current_timestamp = datetime.now(datetime.timezone.utc) # Timestamp para esta tentativa de raspagem
+    current_timestamp = datetime.now(timezone.utc)  # Corrigido: usar timezone.utc em vez de datetime.timezone.utc
 
     try:
         logger.info("Tentando raspar dados ao vivo da Embrapa...")
@@ -137,14 +138,11 @@ def obter_dados_viticultura_e_salvar(db: Session, background_tasks: BackgroundTa
 
 
 def buscar_dados_especificos(db: Session, background_tasks: BackgroundTasks, ano_min: int, ano_max: int, opcao: str):
-    from src.app.scraper.viticulture_partial_scraper import run_scrape_by_params
-    from src.app.repository.viticulture_repo import get_specific_data_from_db
-
     fonte_mensagem = "Falha ao obter dados"
     data_for_response: List[ViticulturaResponse] = []
     mensagem_adicional = None
-    current_timestamp = datetime.utcnow()
-
+    current_timestamp = datetime.now(timezone.utc)  # Corrigido: usar datetime.now(timezone.utc) em vez de datetime.utcnow()
+         
     try:
         scraped_data_list = run_scrape_by_params(ano_min, ano_max, opcao)
         if scraped_data_list and any(item.get('dados') for item in scraped_data_list):
