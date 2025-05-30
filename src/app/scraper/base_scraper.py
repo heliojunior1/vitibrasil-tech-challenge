@@ -1,4 +1,5 @@
 import requests
+import re
 from bs4 import BeautifulSoup
 from urllib.parse import urlencode
 import time
@@ -415,7 +416,6 @@ class BaseScraper:
     
     def _process_header_with_units(self, header: str, value: Any, row_data: Dict[str, Any]) -> None:
         """Processa header que pode ter unidades embutidas"""
-        import re
         
         # Formato com duplo underscore: quantidade__kg
         if "__" in header:
