@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class ScrapingConfig:
     """Configurações para scraping"""
     DEFAULT_REFERENCE_YEAR: int = 2023
-    FALLBACK_MIN_YEAR: int = 2023
+    FALLBACK_MIN_YEAR: int = 1970
     FALLBACK_MAX_YEAR: int = 2023
     REQUEST_DELAY: float = 0.5
     MAX_RETRIES: int = 3

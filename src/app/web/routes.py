@@ -85,6 +85,7 @@ async def get_viticulture_data_and_save(
         "Permite ao usuário especificar um intervalo de anos e uma opção (aba) para obter dados de viticultura. \n"
         "Tenta raspagem ao vivo da Embrapa; se falhar, retorna dados do cache do banco de dados. \n"
         "O salvamento dos dados raspados ocorre em background. Requer token JWT válido.\n"
+        "Opções disponíveis: 'producao', 'processamento', 'comercializacao', 'importacao', 'exportacao'\n"
         "Parâmetros de paginação: offset (número de registros a pular) e limit (número máximo de registros a retornar).\n"
         "O parâmetro offset deve ser >= 0 e limit deve ser >= 1. "
     )
