@@ -84,13 +84,15 @@ vitibrasil-tech-challenge/
     ```
 
 4.  **Configure as variáveis de ambiente:**
-    Crie um arquivo `.env` na raiz do projeto, baseado no arquivo `.env.example` (se fornecido) ou adicione as seguintes variáveis. Para este projeto, a URL do banco de dados é definida diretamente no código ([`src/app/config/database.py`](src\app\config\database.py)), mas a chave secreta JWT é importante para produção.
+    Crie um arquivo `.env` na raiz do projeto, baseado no arquivo `.env.example` ou adicione as seguintes variáveis (exemplo):
     ```env
     # .env
-    # Nenhuma variável de ambiente é estritamente necessária para rodar localmente
-    # com SQLite e a SECRET_KEY padrão em jwt_handler.py.
-    # Para produção, você configuraria DATABASE_URL e JWT_SECRET via variáveis de ambiente do host.
+    # Para funcionamento local, as seguintes variáveis são obrigatórias:
+    # DATABASE_URL - Define a URL do banco de dados (SQLite para desenvolvimento)
+    # JWT_SECRET - Chave secreta para geração de tokens JWT
     ```
+    **Importante:** Ambas as variáveis são obrigatórias para o funcionamento da aplicação, mesmo em desenvolvimento local.
+
     A `SECRET_KEY` para JWT está definida em [`src/app/auth/jwt_handler.py`](src\app\auth\jwt_handler.py) e pode ser externalizada para uma variável de ambiente para maior segurança em produção.
 
 ## Executando a Aplicação
