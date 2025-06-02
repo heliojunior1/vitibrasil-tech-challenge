@@ -7,6 +7,8 @@ from src.app.config.database import get_db
 from src.app.auth.dependencies import get_current_user 
 from src.app.domain.viticulture import DadosEspecificosRequest
 from src.app.service.viticulture_service import buscar_dados_especificos
+from src.app.domain.prediction import PredictionRequest, PredictionResponse
+from src.app.service.prediction_service import prediction_service
 
 
 # from src.app.domain.user import User # <--- REMOVER OU COMENTAR ESTA LINHA
@@ -142,3 +144,39 @@ async def obter_dados_especificos(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro interno do servidor ao processar a solicitação. Detalhe: {str(e)}"
         )
+        
+
+@router.post("/previsao", response_model=PredictionResponse)
+def predict_production(
+    request: PredictionRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Realiza previsão de produção/comercialização total para o próximo ano
+    
+    Retorna:
+    - Quantidade total do ano anterior
+    - Quantidade total prevista para o próximo ano
+    """
+    try:
+        prediction = prediction_service.predict_production(db, request)
+        return prediction
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro interno na previsão: {str(e)}")
+
+@router.get("/previsao/opcoes")
+def get_available_options(current_user: dict = Depends(get_current_user)):
+    """
+    Retorna as opções disponíveis para previsão
+    """
+    return {
+        "opcoes_disponiveis": prediction_service.supported_options,
+        "exemplo_uso": {
+            "opcao": "producao",
+            "ano_minimo": 2010
+        },
+        "descricao": "O serviço retorna a quantidade total do ano anterior e a previsão para o próximo ano"
+    }
