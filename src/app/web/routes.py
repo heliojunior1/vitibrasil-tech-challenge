@@ -146,7 +146,7 @@ async def obter_dados_especificos(
         )
         
 
-@router.post("/previsao", response_model=PredictionResponse)
+@router.post("/predict", response_model=PredictionResponse)
 def predict_production(
     request: PredictionRequest,
     db: Session = Depends(get_db),
@@ -167,7 +167,7 @@ def predict_production(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro interno na previsão: {str(e)}")
 
-@router.get("/previsao/opcoes")
+@router.get("/opcoes")
 def get_available_options(current_user: dict = Depends(get_current_user)):
     """
     Retorna as opções disponíveis para previsão
