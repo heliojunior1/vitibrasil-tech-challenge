@@ -41,7 +41,7 @@ vitibrasil-tech-challenge/
 │   │       ├── routes.py           # Rotas principais da API
 │   │       └── routes_auth.py      # Rotas de autenticação
 │   ├── tests/                      # Testes unitários e de integração (a serem desenvolvidos)
-│   ├── architecture-diagram.drawio # Diagrama de arquitetura ("Draw.io Integration" - Extensão do VS Code)
+│── architecture-diagram.drawio     # Diagrama de arquitetura ("Draw.io Integration" - Extensão do VS Code)
 ├── .env.example                    # Arquivo de exemplo para variáveis de ambiente
 ├── .gitignore
 ├── LICENSE
@@ -49,6 +49,9 @@ vitibrasil-tech-challenge/
 ├── render.yaml           # Configuração para deploy no Render
 └── requirements.txt      # Dependências do projeto
 ```
+## Diagrama de Arquitetura
+
+![Diagrama de Arquitetura](architecture-diagram.png)
 
 ## Configuração e Instalação
 
