@@ -222,7 +222,7 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
         ```json
         {
           "opcao": "producao",
-          "ano_inicial": 2019
+          "ano_minimo": 2019
         }
         ```
     *   Resposta (exemplo):
