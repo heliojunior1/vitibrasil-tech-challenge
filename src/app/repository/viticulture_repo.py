@@ -6,14 +6,14 @@ from src.app.models.viticulture import Viticultura as ViticulturaModel
 from src.app.domain.viticulture import ViticulturaCreate
 logger = logging.getLogger(__name__)
 
-def get_all_data_by_option(db: Session, opcao: str, ano_inicial: int) -> List[Dict]:
+def get_all_data_by_option(db: Session, opcao: str, ano_minimo: int) -> List[Dict]:
     """
     Busca todos os dados históricos para uma opção específica a partir de um ano mínimo
     """
     try:
         results = db.query(ViticulturaModel).filter(
             ViticulturaModel.aba.ilike(f"%{opcao}%"),
-            ViticulturaModel.ano >= ano_inicial
+            ViticulturaModel.ano >= ano_minimo
         ).order_by(ViticulturaModel.ano.asc()).all()
         
         data_list = []
@@ -27,7 +27,7 @@ def get_all_data_by_option(db: Session, opcao: str, ano_inicial: int) -> List[Di
                 'data_raspagem': result.data_raspagem
             })
         
-        logger.info(f"Encontrados {len(data_list)} registros para '{opcao}' a partir de {ano_inicial}")
+        logger.info(f"Encontrados {len(data_list)} registros para '{opcao}' a partir de {ano_minimo}")
         return data_list
         
     except Exception as e:
