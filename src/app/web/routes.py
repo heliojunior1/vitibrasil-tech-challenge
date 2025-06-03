@@ -160,13 +160,26 @@ def predict_production(
     Utiliza os dados armazenado na base de cache da aplicação.
     
     Pré-requisito:
-    Executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
+    Executar um dos serviços de obtenção de dados (/dados ou /dados-especificos).
     Precisa que o ano inicial passado seja, pelo menos, 2 anos anteriores ao maior ano disponível no cache.
         
-    Retorna:
-    - Quantidade total do ano anterior
-    - Quantidade total prevista para o próximo ano
-    """
+    Retorno:
+        dict: Um dicionário com os seguintes campos:
+            - opcao (str): Opção escolhida para a previsão (ex: 'producao', 'comercializacao').
+            - ano_anterior (int): Ano mais recente anterior ao previsto que consta no cache.
+            - quantidade_ano_anterior (float): Quantidade total do ano anterior ao ano de previsão.
+            - ano_previsto (int): Ano para o qual a previsão foi realizada.
+            - quantidade_prevista (float): Quantidade prevista para o ano previsto.
+            - unidade (str): Unidade de medida da quantidade (ex: 'L').
+            - confianca (float): Grau de confiança da previsão (ex: 0.75).
+            - modelo_usado (str): Nome do modelo utilizado na previsão (ex: 'Prophet').
+            - dados_historicos_anos (int): Quantidade de anos da série histórica usada para previsão.
+            - data_previsao (str): Data e hora em que a previsão foi realizada (ISO 8601).
+            - detalhes (dict): Dicionário com detalhes adicionais da previsão:
+                - mae (float | None): Mean Absolute Error.
+                - rmse (float | None): Root Mean Squared Error.
+                - trend (str): Tendência identificada nos dados (ex: 'crescente').
+                - variacao_percentual (float): Variação percentual prevista em relação ao ano anterior.    """
     try:
         prediction = prediction_service.predict_production(db, request)
         return prediction

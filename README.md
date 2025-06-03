@@ -129,7 +129,7 @@ Você pode rodar a API do Vitibrasil Tech Challenge utilizando Docker. Siga os p
 Se ainda não tem o Docker instalado, siga as instruções oficiais de instalação no site:  
 [Como instalar o Docker](https://docs.docker.com/get-docker/)
 
-### 1. Build da imagem Docker
+#### 1. Build da imagem Docker
 
 Na raiz do projeto, execute:
 
@@ -137,7 +137,7 @@ Na raiz do projeto, execute:
 docker build -f docker/Dockerfile -t vitibrasil-api .
 ```
 
-### 2. Rodando o container
+#### 2. Rodando o container
 
 Execute o container (usar o nome `vitibrasil-api` é opcional), expondo a porta 8080e passando as variáveis de ambiente através do arquivo `.env`:
 
@@ -225,6 +225,22 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
           "ano_minimo": 2019
         }
         ```
+    *   Retorno: dicionário com os seguintes campos:
+        - opcao (str): Opção escolhida para a previsão (ex: 'producao', 'comercializacao').
+        - ano_anterior (int): Ano mais recente anterior ao previsto que consta no cache.
+        - quantidade_ano_anterior (float): Quantidade total do ano anterior ao ano de previsão.
+        - ano_previsto (int): Ano para o qual a previsão foi realizada.
+        - quantidade_prevista (float): Quantidade prevista para o ano previsto.
+        - unidade (str): Unidade de medida da quantidade (ex: 'L').
+        - confianca (float): Grau de confiança da previsão (ex: 0.75).
+        - modelo_usado (str): Nome do modelo utilizado na previsão (ex: 'Prophet').
+        - dados_historicos_anos (int): Quantidade de anos da série histórica usada para previsão.
+        - data_previsao (str): Data e hora em que a previsão foi realizada (ISO 8601).
+        - detalhes (dict): Dicionário com detalhes adicionais da previsão:
+            - mae (float | None): Mean Absolute Error.
+            - rmse (float | None): Root Mean Squared Error.
+            - trend (str): Tendência identificada nos dados (ex: 'crescente').
+            - variacao_percentual (float): Variação percentual prevista em relação ao ano anterior.
     *   Resposta (exemplo):
         ```json
         {
