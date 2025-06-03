@@ -1,10 +1,38 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List
+from typing import List, Dict
 import logging
 from src.app.models.viticulture import Viticultura as ViticulturaModel
 from src.app.domain.viticulture import ViticulturaCreate
 logger = logging.getLogger(__name__)
+
+def get_all_data_by_option(db: Session, opcao: str, ano_minimo: int) -> List[Dict]:
+    """
+    Busca todos os dados históricos para uma opção específica a partir de um ano mínimo
+    """
+    try:
+        results = db.query(ViticulturaModel).filter(
+            ViticulturaModel.aba.ilike(f"%{opcao}%"),
+            ViticulturaModel.ano >= ano_minimo
+        ).order_by(ViticulturaModel.ano.asc()).all()
+        
+        data_list = []
+        for result in results:
+            data_list.append({
+                'id': result.id,
+                'ano': result.ano,
+                'aba': result.aba,
+                'subopcao': result.subopcao,
+                'dados_list_json': result.dados_list_json,
+                'data_raspagem': result.data_raspagem
+            })
+        
+        logger.info(f"Encontrados {len(data_list)} registros para '{opcao}' a partir de {ano_minimo}")
+        return data_list
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar dados por opção: {e}")
+        raise
 
 def save_bulk(db: Session, data_list: List[ViticulturaCreate]):
     """

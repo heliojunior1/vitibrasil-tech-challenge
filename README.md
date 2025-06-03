@@ -9,6 +9,7 @@ Projeto de API para coleta e consulta de dados de vitivinicultura da Embrapa. De
 *   **Autenticação:** Proteção dos endpoints de dados utilizando autenticação JWT (registro e login de usuários).
 *   **Processamento em Background:** O salvamento dos dados no banco de dados após a raspagem é realizado em background para não bloquear a resposta da API.
 *   **Estrutura Organizada:** O projeto segue uma estrutura modular para facilitar a manutenção e escalabilidade.
+*   **Predição:** O projeto oferece um serviço de previsão simples de dados para o ano seguinte ao dos dados disponíveis.
 
 ## Tech Stack
 
@@ -26,6 +27,7 @@ Projeto de API para coleta e consulta de dados de vitivinicultura da Embrapa. De
 
 ```
 vitibrasil-tech-challenge/
+├── docker/                         # Configurações para deploy no Docker
 ├── src/
 │   ├── app/
 │   │   ├── auth/                   # Lógica de autenticação e JWT
@@ -35,19 +37,22 @@ vitibrasil-tech-challenge/
 │   │   ├── repository/             # Camada de acesso aos dados (operações de BD)
 │   │   ├── scraper/                # Lógica de raspagem de dados
 │   │   ├── service/                # Lógica de negócios
+│   │       ├── prediction_service.py   # Lógica do serviço de predição
+│   │       ├── user_service.py         # Lógica de autenticação de usuários
+│   │       └── viticulture_service.py  # Lógica dos dados de viticultura
 │   │   ├── utils/                  # Utilitários (ex: hash de senha)
 │   │   └── web/                    # Definição da aplicação FastAPI e rotas
 │   │       ├── main.py             # Ponto de entrada da aplicação FastAPI
 │   │       ├── routes.py           # Rotas principais da API
 │   │       └── routes_auth.py      # Rotas de autenticação
 │   ├── tests/                      # Testes unitários e de integração (a serem desenvolvidos)
-│── architecture-diagram.drawio     # Diagrama de arquitetura ("Draw.io Integration" - Extensão do VS Code)
 ├── .env.example                    # Arquivo de exemplo para variáveis de ambiente
 ├── .gitignore
+├── architecture-diagram.png       # Diagrama de arquitetura
 ├── LICENSE
 ├── README.md
-├── render.yaml           # Configuração para deploy no Render
-└── requirements.txt      # Dependências do projeto
+├── render.yaml                     # Configuração para deploy no Render
+└── requirements.txt                # Dependências do projeto
 ```
 ## Diagrama de Arquitetura
 
@@ -117,6 +122,40 @@ gunicorn src.app.web.main:app --workers 4 --worker-class uvicorn.workers.Uvicorn
 ```
 (A porta `$PORT` será definida pelo ambiente de hospedagem como o Render).
 
+## Executando a aplicação com Docker
+
+Você pode rodar a API do Vitibrasil Tech Challenge utilizando Docker. Siga os passos abaixo.
+
+### Pré-requisito
+
+- Docker instalado em sua máquina.  
+Se ainda não tem o Docker instalado, siga as instruções oficiais de instalação no site:  
+[Como instalar o Docker](https://docs.docker.com/get-docker/)
+
+### 1. Build da imagem Docker
+
+Na raiz do projeto, execute:
+
+```sh
+docker build -f docker/Dockerfile -t vitibrasil-api .
+```
+
+### 2. Rodando o container
+
+Execute o container (usar o nome `vitibrasil-api` é opcional), expondo a porta 8080e passando as variáveis de ambiente através do arquivo `.env`:
+
+```sh
+docker run --name vitibrasil-api --env-file .env -p 8080:8080 vitibrasil-api
+```
+
+A aplicação estará disponível em [http://localhost:8080](http://localhost:8080).
+
+---
+
+**Observações:**
+- Certifique-se de que o arquivo `.env` esteja presente e contendo as variáveis de ambiente necessárias.
+- Para rodar em modo "detached" (em segundo plano), adicione o parâmetro `-d` ao comando `docker run`.
+
 ## Endpoints da API
 
 Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autenticação estão prefixados com `/auth`.
@@ -141,8 +180,6 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
     *   Se a raspagem ao vivo falhar, serve os últimos dados do cache do banco de dados.
     *   O salvamento no banco de dados ocorre em background.
     *   Header de Autorização: `Bearer <seu_token_jwt>`
-
-
 
 *   **`POST /api/viticultura/dados-especificos`**: (Requer Autenticação) Obtém dados de viticultura para um intervalo de anos e uma opção (aba).
     *   Permite ao usuário especificar o intervalo de anos e a aba desejada.
@@ -174,6 +211,42 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
             }
           ],
           "message": "Dados de raspagem (2022-2023, producao) retornados. Salvamento no banco de dados iniciado em background."
+        }
+        ```
+
+### Previsão de dados
+
+*   **`POST /api/viticultura/predict`**: (Requer Autenticação) Realiza previsão de quantidade total para o ano seguinte, conforme a opção escolhida.
+    *   Usa os dados já armazenados no cache de banco de dados.
+    *   Depende que existam dados no cache, ou seja, que tenha sido executado anteriormente um dos serviços de Viticultura.
+    *   Precisa que o ano inicial passado seja, pelo menos, 2 anos anteriores ao maior ano disponível no cache.
+    *   Header de Autorização: `Bearer <seu_token_jwt>`
+    *   Corpo da requisição (JSON):
+        ```json
+        {
+          "opcao": "producao",
+          "ano_inicial": 2019
+        }
+        ```
+    *   Resposta (exemplo):
+        ```json
+        {
+            "opcao": "producao",
+            "ano_anterior": 2023,
+            "quantidade_ano_anterior": 2746757220.0,
+            "ano_previsto": 2024,
+            "quantidade_prevista": 2316840193.15,
+            "unidade": "L",
+            "confianca": 0.75,
+            "modelo_usado": "Prophet",
+            "dados_historicos_anos": 5,
+            "data_previsao": "2025-06-03T12:58:09.457242",
+            "detalhes": {
+                "mae": null,
+                "rmse": null,
+                "trend": "crescente",
+                "variacao_percentual": -15.65
+            }
         }
         ```
 
