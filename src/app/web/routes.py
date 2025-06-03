@@ -146,14 +146,20 @@ async def obter_dados_especificos(
         )
         
 
-@router.post("/predict", response_model=PredictionResponse)
+@router.post("/predict", 
+             response_model=PredictionResponse,
+             summary="Realiza previsão de quantidade total para o ano seguinte, conforme a opção escolhida"
+)
 def predict_production(
     request: PredictionRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Realiza previsão de produção/comercialização total para o próximo ano
+    Realiza previsão de quantidade total para o ano seguinte, conforme a opção escolhida.
+    Utiliza os dados armazenado na base de cache da aplicação.
+    
+    Pré-requisito: executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
     
     Retorna:
     - Quantidade total do ano anterior
@@ -167,10 +173,15 @@ def predict_production(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro interno na previsão: {str(e)}")
 
-@router.get("/opcoes")
+@router.get("/opcoes",
+            summary="Retorna as opções de agrupamento de dados disponíveis no site da Embrapa"
+)
 def get_available_options(current_user: dict = Depends(get_current_user)):
     """
-    Retorna as opções disponíveis para previsão
+    Retorna as opções de agrupamento de dados disponíveis no site da Embrapa para utilizar no serviço de previsão. 
+    Utiliza os dados armazenado na base de cache da aplicação.
+    
+    Pré-requisito: executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
     """
     return {
         "opcoes_disponiveis": prediction_service.supported_options,

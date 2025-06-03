@@ -114,6 +114,40 @@ gunicorn src.app.web.main:app --workers 4 --worker-class uvicorn.workers.Uvicorn
 ```
 (A porta `$PORT` será definida pelo ambiente de hospedagem como o Render).
 
+## Executando a aplicação com Docker
+
+Você pode rodar a API do Vitibrasil Tech Challenge utilizando Docker. Siga os passos abaixo.
+
+### Pré-requisito
+
+- Docker instalado em sua máquina.  
+Se ainda não tem o Docker instalado, siga as instruções oficiais de instalação no site:  
+[Como instalar o Docker](https://docs.docker.com/get-docker/)
+
+### 1. Build da imagem Docker
+
+Na raiz do projeto, execute:
+
+```sh
+docker build -f docker/Dockerfile -t vitibrasil-api .
+```
+
+### 2. Rodando o container
+
+Execute o container (usar o nome `vitibrasil-api` é opcional), expondo a porta 8080e passando as variáveis de ambiente através do arquivo `.env`:
+
+```sh
+docker run --name vitibrasil-api --env-file .env -p 8080:8080 vitibrasil-api
+```
+
+A aplicação estará disponível em [http://localhost:8080](http://localhost:8080).
+
+---
+
+**Observações:**
+- Certifique-se de que o arquivo `.env` esteja presente e contendo as variáveis de ambiente necessárias.
+- Para rodar em modo "detached" (em segundo plano), adicione o parâmetro `-d` ao comando `docker run`.
+
 ## Endpoints da API
 
 Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autenticação estão prefixados com `/auth`.
