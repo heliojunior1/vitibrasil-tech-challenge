@@ -54,9 +54,6 @@ vitibrasil-tech-challenge/
 ├── render.yaml                     # Configuração para deploy no Render
 └── requirements.txt                # Dependências do projeto
 ```
-## Diagrama de Arquitetura
-
-![Diagrama de Arquitetura](architecture-diagram.png)
 
 ## Configuração e Instalação
 
