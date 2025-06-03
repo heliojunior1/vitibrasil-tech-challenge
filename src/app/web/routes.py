@@ -159,8 +159,10 @@ def predict_production(
     Realiza previsão de quantidade total para o ano seguinte, conforme a opção escolhida.
     Utiliza os dados armazenado na base de cache da aplicação.
     
-    Pré-requisito: executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
-    
+    Pré-requisito:
+    Executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
+    Precisa que o ano inicial passado seja, pelo menos, 2 anos anteriores ao maior ano disponível no cache.
+        
     Retorna:
     - Quantidade total do ano anterior
     - Quantidade total prevista para o próximo ano

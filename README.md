@@ -9,6 +9,7 @@ Projeto de API para coleta e consulta de dados de vitivinicultura da Embrapa. De
 *   **Autenticação:** Proteção dos endpoints de dados utilizando autenticação JWT (registro e login de usuários).
 *   **Processamento em Background:** O salvamento dos dados no banco de dados após a raspagem é realizado em background para não bloquear a resposta da API.
 *   **Estrutura Organizada:** O projeto segue uma estrutura modular para facilitar a manutenção e escalabilidade.
+*   **Predição:** O projeto oferece um serviço de previsão simples de dados para o ano seguinte ao dos dados disponíveis.
 
 ## Tech Stack
 
@@ -26,6 +27,7 @@ Projeto de API para coleta e consulta de dados de vitivinicultura da Embrapa. De
 
 ```
 vitibrasil-tech-challenge/
+├── docker/                         # Configurações para deploy no Docker
 ├── src/
 │   ├── app/
 │   │   ├── auth/                   # Lógica de autenticação e JWT
@@ -35,19 +37,22 @@ vitibrasil-tech-challenge/
 │   │   ├── repository/             # Camada de acesso aos dados (operações de BD)
 │   │   ├── scraper/                # Lógica de raspagem de dados
 │   │   ├── service/                # Lógica de negócios
+│   │       ├── prediction_service.py   # Lógica do serviço de predição
+│   │       ├── user_service.py         # Lógica de autenticação de usuários
+│   │       └── viticulture_service.py  # Lógica dos dados de viticultura
 │   │   ├── utils/                  # Utilitários (ex: hash de senha)
 │   │   └── web/                    # Definição da aplicação FastAPI e rotas
 │   │       ├── main.py             # Ponto de entrada da aplicação FastAPI
 │   │       ├── routes.py           # Rotas principais da API
 │   │       └── routes_auth.py      # Rotas de autenticação
 │   ├── tests/                      # Testes unitários e de integração (a serem desenvolvidos)
-│   ├── architecture-diagram.drawio # Diagrama de arquitetura ("Draw.io Integration" - Extensão do VS Code)
 ├── .env.example                    # Arquivo de exemplo para variáveis de ambiente
 ├── .gitignore
+├── architecture-diagram.png       # Diagrama de arquitetura
 ├── LICENSE
 ├── README.md
-├── render.yaml           # Configuração para deploy no Render
-└── requirements.txt      # Dependências do projeto
+├── render.yaml                     # Configuração para deploy no Render
+└── requirements.txt                # Dependências do projeto
 ```
 
 ## Configuração e Instalação
@@ -173,8 +178,6 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
     *   O salvamento no banco de dados ocorre em background.
     *   Header de Autorização: `Bearer <seu_token_jwt>`
 
-
-
 *   **`POST /api/viticultura/dados-especificos`**: (Requer Autenticação) Obtém dados de viticultura para um intervalo de anos e uma opção (aba).
     *   Permite ao usuário especificar o intervalo de anos e a aba desejada.
     *   Tenta raspagem ao vivo da Embrapa; se falhar, retorna dados do cache do banco de dados.
@@ -205,6 +208,42 @@ Todos os endpoints de dados estão prefixados com `/api`. Endpoints de autentica
             }
           ],
           "message": "Dados de raspagem (2022-2023, producao) retornados. Salvamento no banco de dados iniciado em background."
+        }
+        ```
+
+### Previsão de dados
+
+*   **`POST /api/viticultura/predict`**: (Requer Autenticação) Realiza previsão de quantidade total para o ano seguinte, conforme a opção escolhida.
+    *   Usa os dados já armazenados no cache de banco de dados.
+    *   Depende que existam dados no cache, ou seja, que tenha sido executado anteriormente um dos serviços de Viticultura.
+    *   Precisa que o ano inicial passado seja, pelo menos, 2 anos anteriores ao maior ano disponível no cache.
+    *   Header de Autorização: `Bearer <seu_token_jwt>`
+    *   Corpo da requisição (JSON):
+        ```json
+        {
+          "opcao": "producao",
+          "ano_inicial": 2019
+        }
+        ```
+    *   Resposta (exemplo):
+        ```json
+        {
+            "opcao": "producao",
+            "ano_anterior": 2023,
+            "quantidade_ano_anterior": 2746757220.0,
+            "ano_previsto": 2024,
+            "quantidade_prevista": 2316840193.15,
+            "unidade": "L",
+            "confianca": 0.75,
+            "modelo_usado": "Prophet",
+            "dados_historicos_anos": 5,
+            "data_previsao": "2025-06-03T12:58:09.457242",
+            "detalhes": {
+                "mae": null,
+                "rmse": null,
+                "trend": "crescente",
+                "variacao_percentual": -15.65
+            }
         }
         ```
 
