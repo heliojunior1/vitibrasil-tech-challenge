@@ -36,10 +36,10 @@ class PredictionService:
                 raise ValueError(f"Opção '{request.opcao}' não suportada. Opções disponíveis: {self.supported_options}")
             
             # Buscar dados históricos
-            historical_data = self._get_historical_data(db, request.opcao, request.ano_inicial)
+            historical_data = self._get_historical_data(db, request.opcao, request.ano_minimo)
             
             if not historical_data:
-                raise ValueError(f"Nenhum dado histórico encontrado para '{request.opcao}' a partir de {request.ano_inicial}")
+                raise ValueError(f"Nenhum dado histórico encontrado para '{request.opcao}' a partir de {request.ano_minimo}")
             
             # Preparar dados para o modelo
             df_prepared = self._prepare_data_for_prediction(historical_data)
@@ -58,9 +58,9 @@ class PredictionService:
             # Preparar resposta
             response = PredictionResponse(
                 opcao=request.opcao,
-                ano_inicialor=last_year,
-                quantidade_ano_inicialor=round(last_year_quantity, 2),
-                ano_inicialto=next_year,
+                ano_anterior=last_year,
+                quantidade_ano_anterior=round(last_year_quantity, 2),
+                ano_previsto=next_year,
                 quantidade_prevista=round(prediction_result['predicted_value'], 2),
                 unidade=prediction_result['unit'],
                 confianca=prediction_result['confidence'],
@@ -87,9 +87,9 @@ class PredictionService:
         """
         return PredictionResponse(
             opcao=request.opcao,
-            ano_inicialor=2023,
-            quantidade_ano_inicialor=1000000.0,
-            ano_inicialto=2024,
+            ano_anterior=2023,
+            quantidade_ano_anterior=1000000.0,
+            ano_previsto=2024,
             quantidade_prevista=1050000.0,
             unidade="L",
             confianca=0.75,
@@ -99,13 +99,13 @@ class PredictionService:
             detalhes={"trend": "crescente", "note": "Previsão mock para testes"}
         )
     
-    def _get_historical_data(self, db: Session, opcao: str, ano_inicial: int) -> List[Dict]:
+    def _get_historical_data(self, db: Session, opcao: str, ano_minimo: int) -> List[Dict]:
         """
         Busca dados históricos do banco de dados
         """
         try:
             from src.app.repository.viticulture_repo import get_all_data_by_option
-            all_data = get_all_data_by_option(db, opcao, ano_inicial)
+            all_data = get_all_data_by_option(db, opcao, ano_minimo)
             return all_data
         except Exception as e:
             logger.error(f"Erro ao buscar dados históricos: {str(e)}")

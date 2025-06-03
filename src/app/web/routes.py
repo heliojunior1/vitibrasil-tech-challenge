@@ -183,13 +183,13 @@ def get_available_options(current_user: dict = Depends(get_current_user)):
     Retorna as opções de agrupamento de dados disponíveis no site da Embrapa para utilizar no serviço de previsão. 
     Utiliza os dados armazenado na base de cache da aplicação.
     
-    Pré-requisito: executar um dos serviços de obtenção de dados (/dados ou /dados-especificos).
+    Pré-requisito: executar um dos servi;os de obtenção de dados (/dados ou /dados-especificos).
     """
     return {
         "opcoes_disponiveis": prediction_service.supported_options,
         "exemplo_uso": {
             "opcao": "producao",
-            "ano_inicial": 2010
+            "ano_minimo": 2010
         },
         "descricao": "O serviço retorna a quantidade total do ano anterior e a previsão para o próximo ano"
     }
