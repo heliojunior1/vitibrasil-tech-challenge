@@ -26,4 +26,4 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 
 # Comando de inicialização (ajuste se necessário)
-CMD ["gunicorn", "src.app.web.main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "src.app.web.main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080"]
