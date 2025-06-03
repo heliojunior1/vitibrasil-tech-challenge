@@ -4,7 +4,7 @@ from datetime import datetime
 
 class PredictionRequest(BaseModel):
     opcao: str = Field(..., description="Tipo de opção (producao, exportacao, etc.)")
-    ano_inicial: int = Field(..., description="Ano mínimo de dados para usar na análise", ge=1970)
+    ano_minimo: int = Field(..., description="Ano mínimo de dados para usar na análise", ge=1970)
     
 class PredictionResponse(BaseModel):
     opcao: str
